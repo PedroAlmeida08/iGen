@@ -1,0 +1,31 @@
+# Arquivos de Configuração e Senhas
+.env
+.env.*
+
+# Pastas de Dependências e Ambientes Virtuais
+*/venv/
+*/node_modules/
+
+# Arquivos de Cache e Bytecode do Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Arquivos de Build e Pacotes
+/build/
+/dist/
+*.egg-info/
+
+# Logs e Bancos de Dados Locais
+*.log
+*.sqlite3
+*.db
+
+# Arquivos de Configuração de IDEs
+.vscode/
+.idea/
+
+# Arquivos de Sistema Operacional
+.DS_Store
+Thumbs.db
