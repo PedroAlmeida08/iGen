@@ -1,0 +1,65 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>iGen - Dashboard</title>
+    <link rel="stylesheet" href="{% static 'core/css/style.css' %}">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="{% url 'index' %}" class="navbar-brand">🚀 iGen</a>
+        <div class="nav-links-header">
+            <a href="{% url 'index' %}">Início</a>
+            <a href="{% url 'listar_pessoas' %}">Pessoas</a>
+            <a href="{% url 'listar_eventos' %}">Eventos</a>
+        </div>
+    </nav>
+
+    <div class="container" style="max-width: 900px;">
+        <div class="dashboard-grid">
+            <div class="card-stats">
+                <p>Total de Pessoas</p>
+                <h2>{{ total_pessoas }}</h2>
+                <a href="{% url 'listar_pessoas' %}">Ver lista completa</a>
+            </div>
+            <div class="card-stats">
+                <p>Total de Eventos</p>
+                <h2 style="color: #e67e22;">{{ total_eventos }}</h2>
+                <a href="{% url 'listar_eventos' %}">Ver lista completa</a>
+            </div>
+        </div>
+
+        <div class="recent-section">
+            <h3>👤 Últimas pessoas registradas</h3>
+            {% for pessoa in pessoas_recentes %}
+                <div class="person-item">
+                    <strong>{{ pessoa.nomeCompleto }}</strong>
+                    {% if pessoa.apelido %}
+                        ({{ pessoa.apelido }})
+                    {% endif %}
+                </div>
+            {% empty %}
+                <p>Nenhuma pessoa registrada.</p>
+            {% endfor %}
+        </div>
+
+        <div class="recent-section">
+            <h3>📅 Últimos Eventos Registrados</h3>
+            {% for evento in eventos_recentes %}
+                <div class="event-item">
+                    <strong>{{ evento.tipo }}</strong> - {{ evento.data|date:"d/m/Y" }}<br>
+                    <small>{{ evento.local|default:"Local não informado" }}</small>
+                </div>
+            {% empty %}
+                <p>Nenhum evento registrado.</p>
+            {% endfor %}
+        </div>
+
+        <div class="actions-footer">
+            <button onclick="location.href='{% url 'cadastrar_pessoa' %}'" class="btn-pessoa">+ Adicionar Pessoa</button>
+            <button onclick="location.href='{% url 'cadastrar_evento' %}'" class="btn-evento">+ Novo Evento</button>
+        </div>
+    </div>
+</body>
+</html>

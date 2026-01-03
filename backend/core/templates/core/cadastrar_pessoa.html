@@ -1,0 +1,28 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>iGen - Cadastrar Pessoa</title>
+    <link rel="stylesheet" href="{% static 'core/css/style.css' %}">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="{% url 'index' %}" class="navbar-brand">🚀 iGen</a>
+        <div class="nav-links-header">
+            <a href="{% url 'index' %}">Início</a>
+            <a href="{% url 'listar_pessoas' %}">Pessoas</a>
+            <a href="{% url 'listar_eventos' %}">Eventos</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1 class="titulo-pessoa">👤 Cadastrar Pessoa</h1>
+        <form method="post">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button type="submit" class="btn-pessoa">Salvar no iGen</button>
+        </form>
+    </div>
+</body>
+</html>

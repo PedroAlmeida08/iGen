@@ -1,0 +1,57 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>iGen - Lista de Eventos</title>
+    <link rel="stylesheet" href="{% static 'core/css/style.css' %}">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="{% url 'index' %}" class="navbar-brand">🚀 iGen</a>
+        <div class="nav-links-header">
+            <a href="{% url 'index' %}">Início</a>
+            <a href="{% url 'listar_pessoas' %}">Pessoas</a>
+            <a href="{% url 'listar_eventos' %}">Eventos</a>
+        </div>
+    </nav>
+
+    <div class="container" style="max-width: 900px;">
+        <h1 class="titulo-evento">📅 Todos os Eventos</h1>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>Tipo de Evento</th>
+                    <th>Data</th>
+                    <th>Local</th>
+                    <th style="text-align: center;">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for evento in eventos %}
+                <tr>
+                    <td><strong>{{ evento.tipo }}</strong></td>
+                    <td>{{ evento.data|date:"d/m/Y" }}</td>
+                    <td>{{ evento.local|default:"-" }}</td>
+                    <td style="text-align: center;">
+                        <a href="{% url 'excluir_evento' evento.uuid %}" 
+                           onclick="return confirm('Deseja realmente apagar este evento?')"
+                           style="color: #dc3545; text-decoration: none; font-weight: bold;">Excluir</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" style="text-align: center;">Nenhum evento registrado.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="actions-footer">
+            <button onclick="location.href='{% url 'index' %}'" class="btn-evento" style="background-color: #6c757d;">🏠 Página Inicial</button>
+            <button onclick="location.href='{% url 'cadastrar_evento' %}'" class="btn-evento">+ Novo Evento</button>
+        </div>
+    </div>
+</body>
+</html>

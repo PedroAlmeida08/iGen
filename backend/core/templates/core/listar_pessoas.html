@@ -1,0 +1,60 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>iGen - Lista de Pessoas</title>
+    <link rel="stylesheet" href="{% static 'core/css/style.css' %}">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="{% url 'index' %}" class="navbar-brand">🚀 iGen</a>
+        <div class="nav-links-header">
+            <a href="{% url 'index' %}">Início</a>
+            <a href="{% url 'listar_pessoas' %}">Pessoas</a>
+            <a href="{% url 'listar_eventos' %}">Eventos</a>
+        </div>
+    </nav>
+
+    <div class="container" style="max-width: 900px;">
+        <h1 class="titulo-pessoa">📋 Membros Cadastrados</h1>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>Nome (Apelido)</th>
+                    <th>Nascimento</th>
+                    <th style="text-align: center;">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pessoa in pessoas %}
+                <tr>
+                    <td>
+                        <a href="{% url 'detalhar_pessoa' pessoa.uuid %}" style="text-decoration: none; color: #1877f2; font-weight: bold;">
+                            {{ pessoa.nomeCompleto }}
+                        </a>
+                        {% if pessoa.apelido %} ({{ pessoa.apelido }}) {% endif %}
+                    </td>
+                    <td>{{ pessoa.dataNascimento|date:"d/m/Y" }}</td>
+                    <td style="text-align: center;">
+                        <a href="{% url 'excluir_pessoa' pessoa.uuid %}" 
+                           onclick="return confirm('Tem certeza que deseja excluir esta pessoa do iGen?')"
+                           style="color: #dc3545; text-decoration: none; font-weight: bold;">Excluir</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="3" style="text-align: center;">Nenhuma pessoa cadastrada ainda.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="actions-footer">
+            <button onclick="location.href='{% url 'index' %}'" class="btn-evento" style="background-color: #6c757d;">🏠 Página Inicial</button>
+            <button onclick="location.href='{% url 'cadastrar_pessoa' %}'" class="btn-pessoa">+ Adicionar Pessoa</button>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,66 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>iGen - Mapa do Grafo</title>
+    <link rel="stylesheet" href="{% static 'core/css/style.css' %}">
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        #network-container {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #ddd;
+            background-color: #f9f9f9;
+            border-radius: 12px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="{% url 'index' %}" class="navbar-brand">🚀 iGen</a>
+        <div class="nav-links-header">
+            <a href="{% url 'index' %}">Início</a>
+            <a href="{% url 'listar_pessoas' %}">Pessoas</a>
+            <a href="{% url 'visualizar_grafo' %}">Ver Grafo</a>
+        </div>
+    </nav>
+
+    <div class="container" style="max-width: 1100px;">
+        <h1>🕸️ Visualização do Grafo Genealógico</h1>
+        <div id="network-container"></div>
+    </div>
+
+    <script type="text/javascript">
+        // Recebe os dados do Django
+        var nodes = new vis.DataSet({{ nodes_json|safe }});
+        var edges = new vis.DataSet({{ edges_json|safe }});
+
+        var container = document.getElementById('network-container');
+        var data = { nodes: nodes, edges: edges };
+        
+        var options = {
+            nodes: {
+                shape: 'dot',
+                size: 20,
+                font: { size: 14, color: '#333' },
+                borderWidth: 2
+            },
+            edges: {
+                width: 2,
+                color: { inherit: 'from' },
+                smooth: { type: 'continuous' }
+            },
+            groups: {
+                pessoa: { color: { background: '#1877f2', border: '#1056b3' }, font: { color: 'black' } },
+                evento: { color: { background: '#e67e22', border: '#d35400' } }
+            },
+            physics: {
+                enabled: true,
+                barnesHut: { gravitationalConstant: -2000, centralGravity: 0.3, springLength: 95 }
+            }
+        };
+
+        var network = new vis.Network(container, data, options);
+    </script>
+</body>
+</html>

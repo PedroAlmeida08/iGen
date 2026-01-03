@@ -1,0 +1,138 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>iGen - Perfil de {{ pessoa.nomeCompleto }}</title>
+    <link rel="stylesheet" href="{% static 'core/css/style.css' %}">
+    <style>
+        .profile-header { border-bottom: 3px solid #1877f2; padding-bottom: 15px; margin-bottom: 25px; }
+        .section-box { background: #ffffff; padding: 20px; border-radius: 12px; margin-bottom: 25px; border: 1px solid #e9ecef; }
+        .section-box h3 { margin-top: 0; color: #4b4f56; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
+        .flex-forms { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .rel-list { list-style: none; padding: 0; }
+        .rel-list li { display: flex; justify-content: space-between; align-items: center; padding: 10px; margin-bottom: 8px; background: #f0f2f5; border-radius: 8px; }
+        .btn-remove { color: #dc3545; text-decoration: none; font-weight: bold; font-size: 1.4rem; padding: 0 8px; }
+        .btn-remove:hover { background: #ffeef0; border-radius: 4px; }
+        hr { border: 0; border-top: 1px solid #eee; margin: 15px 0; }
+        label { font-weight: 600; display: block; margin-top: 10px; }
+        select { width: 100%; padding: 10px; margin-top: 5px; border-radius: 6px; border: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+
+    {% if messages %}
+        {% for message in messages %}
+            <script>alert("{{ message }}");</script>
+        {% endfor %}
+    {% endif %}
+
+    <nav class="navbar">
+        <a href="{% url 'index' %}" class="navbar-brand">🚀 iGen</a>
+        <div class="nav-links-header">
+            <a href="{% url 'index' %}">Início</a>
+            <a href="{% url 'listar_pessoas' %}">Pessoas</a>
+            <a href="{% url 'listar_eventos' %}">Eventos</a>
+        </div>
+    </nav>
+
+    <div class="container" style="max-width: 1000px;">
+        <div class="profile-header">
+            <h1>{{ pessoa.nomeCompleto }} {% if pessoa.apelido %}({{ pessoa.apelido }}){% endif %}</h1>
+            <p><strong>Nascimento:</strong> {{ pessoa.dataNascimento|date:"d/m/Y" }} | <strong>Sexo:</strong> {{ pessoa.sexo }}</p>
+        </div>
+
+        <div class="section-box">
+            <h3>👨‍👩‍👧‍👦 Relacionamentos no Grafo</h3>
+            <ul class="rel-list">
+                {% for p in pessoa.filho_de_pai.all %}
+                    <li>
+                        <span>👴 <strong>Pai:</strong> {{ p.nomeCompleto }}</span>
+                        <a href="{% url 'remover_conexao' pessoa.uuid p.uuid 'filho_de_pai' %}" class="btn-remove">×</a>
+                    </li>
+                {% endfor %}
+                {% for m in pessoa.filho_de_mae.all %}
+                    <li>
+                        <span>👵 <strong>Mãe:</strong> {{ m.nomeCompleto }}</span>
+                        <a href="{% url 'remover_conexao' pessoa.uuid m.uuid 'filho_de_mae' %}" class="btn-remove">×</a>
+                    </li>
+                {% endfor %}
+
+                {% if pessoa.filho_de_pai.all or pessoa.filho_de_mae.all %}<hr>{% endif %}
+
+                {% for f in pessoa.pai_de.all %}
+                    <li>
+                        <span>🔹 <strong>É pai de:</strong> {{ f.nomeCompleto }}</span>
+                        <a href="{% url 'remover_conexao' pessoa.uuid f.uuid 'pai_de' %}" class="btn-remove">×</a>
+                    </li>
+                {% endfor %}
+                {% for f in pessoa.mae_de.all %}
+                    <li>
+                        <span>🔹 <strong>É mãe de:</strong> {{ f.nomeCompleto }}</span>
+                        <a href="{% url 'remover_conexao' pessoa.uuid f.uuid 'mae_de' %}" class="btn-remove">×</a>
+                    </li>
+                {% endfor %}
+
+                {% for c in pessoa.casado_com.all %}
+                    <li>
+                        <span>❤️ <strong>Casado(a) com:</strong> {{ c.nomeCompleto }}</span>
+                        <a href="{% url 'remover_conexao' pessoa.uuid c.uuid 'casado_com' %}" class="btn-remove">×</a>
+                    </li>
+                {% endfor %}
+                {% for e in pessoa.participou.all %}
+                    <li>
+                        <span>📅 <strong>Participou de:</strong> {{ e.tipo }}</span>
+                        <a href="{% url 'remover_conexao' pessoa.uuid e.uuid 'participou' %}" class="btn-remove">×</a>
+                    </li>
+                {% endfor %}
+
+                {% if not pessoa.pai_de.all and not pessoa.mae_de.all and not pessoa.filho_de_pai.all and not pessoa.filho_de_mae.all and not pessoa.participou.all %}
+                    <li style="background: none; color: #888; font-style: italic; justify-content: center;">Sem conexões.</li>
+                {% endif %}
+            </ul>
+        </div>
+
+        <div class="flex-forms">
+            <div class="section-box">
+                <h3>🔗 Conectar Parente</h3>
+                <form action="{% url 'conectar_parentesco' pessoa.uuid %}" method="post">
+                    {% csrf_token %}
+                    <label>A pessoa {{ pessoa.nomeCompleto }}:</label>
+                    <select name="tipo_relacao">
+                        <option value="pai_de">é pai de</option>
+                        <option value="mae_de">é mãe de</option>
+                        <option value="filho_de_pai">é filho de (pai)</option>
+                        <option value="filho_de_mae">é filho de (mãe)</option>
+                        <option value="casado_com">é casado(a) com</option>
+                    </select>
+                    <label>Selecionar Parente:</label>
+                    <select name="pessoa_b">
+                        {% for p in todas_pessoas %}
+                            <option value="{{ p.uuid }}">{{ p.nomeCompleto }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn-pessoa" style="width: 100%; margin-top: 15px;">Salvar Parentesco</button>
+                </form>
+            </div>
+
+            <div class="section-box">
+                <h3>📅 Vincular Evento</h3>
+                <form action="{% url 'conectar_evento_pessoa' pessoa.uuid %}" method="post">
+                    {% csrf_token %}
+                    <label>Selecione o Evento:</label>
+                    <select name="evento_uuid">
+                        {% for e in todos_eventos %}
+                            <option value="{{ e.uuid }}">{{ e.tipo }} ({{ e.data|date:"d/m/Y" }})</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn-evento" style="width: 100%; margin-top: 15px;">Vincular Participação</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="actions-footer">
+            <button onclick="location.href='{% url 'listar_pessoas' %}'" class="btn-evento" style="background-color: #6c757d;">🏠 Voltar para Lista</button>
+        </div>
+    </div>
+</body>
+</html>
