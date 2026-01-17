@@ -1,0 +1,39 @@
+/* frontend/src/App.css */
+
+/* Reset básico */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Garante que o container raiz do Vite ocupe 100% da largura */
+#root {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+body {
+  background-color: #f4f6f8;
+  color: #333;
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden; /* Evita rolagem horizontal indesejada */
+}
+
+/* O container principal do App também precisa ter largura total */
+.app-main {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1; /* Ocupa todo o espaço vertical disponível */
+}
+
+.content-wrap {
+  flex: 1;
+  width: 100%;
+  /* Removemos o padding daqui para deixar cada página decidir seu espaçamento */
+}

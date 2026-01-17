@@ -1,0 +1,110 @@
+/* frontend/src/pages/Admin.css */
+
+.admin-container {
+  max-width: 800px;
+  margin: 40px auto;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  overflow: hidden;
+  padding-bottom: 20px;
+}
+
+/* --- ABAS (TABS) --- */
+.admin-tabs {
+  display: flex;
+  background-color: #f0f2f5;
+  border-bottom: 1px solid #ddd;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 15px;
+  border: none;
+  background: none;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.tab-btn:hover {
+  background-color: #e4e6eb;
+  color: #1877f2;
+}
+
+.tab-btn.active {
+  background-color: white;
+  color: #1877f2;
+  border-top: 3px solid #1877f2;
+}
+
+/* --- FORMULÁRIOS --- */
+.admin-content {
+  padding: 30px;
+}
+
+.form-title {
+  color: #333;
+  margin-bottom: 20px;
+  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #555;
+}
+
+.form-group input, 
+.form-group select, 
+.form-group textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+.form-group input:focus, 
+.form-group select:focus {
+  border-color: #1877f2;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(24, 119, 242, 0.1);
+}
+
+.submit-btn {
+  background-color: #28a745; /* Verde para ação de salvar */
+  color: white;
+  border: none;
+  padding: 12px 25px;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.2s;
+}
+
+.submit-btn:hover {
+  background-color: #218838;
+}
+
+.success-msg {
+  background-color: #d4edda;
+  color: #155724;
+  padding: 15px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  border: 1px solid #c3e6cb;
+}

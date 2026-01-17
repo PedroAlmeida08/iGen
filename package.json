@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "react-graph-vis": "^1.0.7",
+    "vis-network": "^10.0.2"
+  }
+}

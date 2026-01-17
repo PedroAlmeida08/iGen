@@ -1,0 +1,97 @@
+/* frontend/src/pages/Timeline.css */
+
+.timeline-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  position: relative;
+}
+
+.timeline-title {
+  text-align: center;
+  color: #1877f2;
+  margin-bottom: 40px;
+  font-size: 2rem;
+}
+
+/* A Linha Vertical */
+.timeline-list {
+  position: relative;
+  padding-left: 30px;
+  border-left: 4px solid #e0e0e0;
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: 40px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.timeline-item:hover {
+  transform: translateX(5px);
+}
+
+/* A Bolinha na linha */
+.timeline-dot {
+  position: absolute;
+  left: -39px; /* Ajuste para centralizar na linha */
+  top: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background-color: #1877f2;
+  border: 4px solid white;
+  box-shadow: 0 0 0 2px #1877f2;
+}
+
+/* O Conteúdo do Evento (Card) */
+.timeline-content {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  border-left: 5px solid #e67e22; /* Laranja para eventos */
+}
+
+.timeline-date {
+  font-size: 0.85rem;
+  color: #888;
+  font-weight: bold;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+  display: block;
+}
+
+.timeline-content h3 {
+  margin: 0 0 10px 0;
+  color: #333;
+}
+
+.timeline-desc {
+  color: #666;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+/* Reutilizando o Painel Lateral (Mesmo estilo da Árvore) */
+.details-panel {
+  /* Copie isso do Arvore.css se quiser garantir, ou vamos importar o Arvore.css no App */
+  /* Mas para garantir, coloque aqui também ou crie um components/DetailsPanel.css global */
+  position: fixed; /* Fixed para ficar sobre tudo na rolagem */
+  top: 70px; /* Abaixo da navbar */
+  right: 0;
+  bottom: 0;
+  width: 400px;
+  background: white;
+  box-shadow: -5px 0 20px rgba(0,0,0,0.1);
+  padding: 30px;
+  z-index: 100;
+  overflow-y: auto;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}

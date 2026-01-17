@@ -2,21 +2,28 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path('', views.index, name='index'),
-    path('cadastrar-pessoa/', views.cadastrar_pessoa, name='cadastrar_pessoa'),
-    path('cadastrar-evento/', views.cadastrar_evento, name='cadastrar_evento'),
-    path('pessoas/', views.listar_pessoas, name='listar_pessoas'),
-    path('eventos/', views.listar_eventos, name='listar_eventos'),
-    path('pessoa/<str:uuid>/', views.detalhar_pessoa, name='detalhar_pessoa'),
-    path('pessoa/<str:uuid>/conectar-parentesco/',
-         views.conectar_parentesco, name='conectar_parentesco'),
-    path('pessoa/<str:uuid>/conectar-evento/',
-         views.conectar_evento_pessoa, name='conectar_evento_pessoa'),
-    path('pessoa/<str:uuid_a>/remover/<str:uuid_b>/<str:tipo_rel>/',
-         views.remover_conexao, name='remover_conexao'),
-    path('pessoa/<str:uuid>/excluir/',
-         views.excluir_pessoa, name='excluir_pessoa'),
-    path('evento/<str:uuid>/excluir/',
-         views.excluir_evento, name='excluir_evento'),
-    path('grafo/', views.visualizar_grafo, name='visualizar_grafo'),
+    # --- 1. AUTENTICAÇÃO ---
+    path('api/auth/register/', views.api_registrar_usuario, name='auth_register'),
+    path('api/auth/login/', views.api_login, name='auth_login'),
+    path('api/auth/logout/', views.api_logout, name='auth_logout'),
+    path('api/auth/check/', views.api_check_auth, name='auth_check'),
+
+    # --- 2. GRAFO (Visualização) ---
+    path('api/grafo/', views.api_grafo, name='api_grafo'),
+
+    # --- 3. PESSOAS (CRUD + Comentários) ---
+    path('api/pessoas/', views.api_listar_pessoas, name='api_listar_pessoas'),
+    path('api/pessoas/<str:uuid>/', views.api_detalhe_pessoa,
+         name='api_detalhe_pessoa'),
+    path('api/pessoas/<str:uuid>/comentar/',
+         views.api_adicionar_comentario, name='api_adicionar_comentario'),
+
+    # --- 4. EVENTOS ---
+    path('api/eventos/', views.api_listar_eventos, name='api_listar_eventos'),
+    path('api/eventos/<str:uuid>/', views.api_detalhe_evento,
+         name='api_detalhe_evento'),
+
+    # --- 5. RELACIONAMENTOS ---
+    path('api/relacionar/', views.api_criar_relacionamento,
+         name='api_criar_relacionamento'),
 ]

@@ -1,0 +1,94 @@
+/* frontend/src/components/Navbar.css */
+
+.navbar {
+  width: 100%;
+  background-color: #1877f2; /* Azul principal */
+  padding: 0.8rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  position: sticky; /* Mantém no topo ao rolar */
+  top: 0;
+  z-index: 1000;
+}
+
+.navbar-logo {
+  color: white; /* Logo sempre branca para destaque */
+  font-size: 1.5rem;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.navbar-links {
+  list-style: none;
+  display: flex;
+  gap: 20px;
+  align-items: center; /* Garante que links e botão estejam na mesma linha */
+  margin: 0;
+  padding: 0;
+}
+
+/* --- ESTILO DOS LINKS --- */
+.navbar-links a {
+  color: #e6e6e6; /* Padrão: Cinza azulado (inativo) */
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.3s ease; /* Transição suave de cor */
+  font-size: 1rem;
+  padding: 5px 0;
+  position: relative; /* Necessário para a barrinha embaixo (active) */
+}
+
+/* Quando passa o mouse */
+.navbar-links a:hover {
+  color: #ffffff; /* Branco puro */
+  transform: translateY(-2px); /* Sobe levemente */
+}
+
+/* Quando é a página atual (classe 'active' adicionada pelo NavLink) */
+.navbar-links a.active {
+  color: #ffffff;
+  font-weight: 700; /* Mais grosso */
+}
+
+/* Efeito da barrinha embaixo do link ativo */
+.navbar-links a.active::after {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 2px;
+  bottom: 0;
+  left: 0;
+  background-color: #ffffff;
+  border-radius: 2px;
+  animation: slideWidth 0.3s ease-out;
+}
+
+/* Animação para a barrinha crescer */
+@keyframes slideWidth {
+  from { width: 0; opacity: 0; }
+  to { width: 100%; opacity: 1; }
+}
+
+/* --- ESTILO DO BOTÃO SAIR --- */
+.logout-btn {
+  background: rgba(0, 0, 0, 0.1); /* Fundo sutil */
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #e0e0e0; /* Mesmo tom dos links inativos */
+  padding: 6px 14px;
+  border-radius: 20px; /* Formato de pílula */
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-family: inherit;
+  font-weight: 500;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+}
+
+.logout-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: #ffffff;
+  color: #ffffff;
+}

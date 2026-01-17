@@ -1,0 +1,124 @@
+/* frontend/src/pages/Sobre.css */
+
+.sobre-container {
+  max-width: 900px;
+  margin: 40px auto;
+  padding: 0 20px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: #333;
+  animation: fadeIn 0.5s ease-in;
+}
+
+/* HERO SECTION (Topo) */
+.sobre-header {
+  text-align: center;
+  margin-bottom: 50px;
+}
+
+.sobre-header h1 {
+  font-size: 3rem;
+  color: #1877f2;
+  margin-bottom: 10px;
+}
+
+.sobre-header p {
+  font-size: 1.2rem;
+  color: #666;
+  max-width: 600px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* CARDS DE TECNOLOGIA */
+.tech-section {
+  margin-bottom: 50px;
+}
+
+.section-title {
+  text-align: center;
+  font-size: 1.5rem;
+  color: #444;
+  margin-bottom: 30px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.tech-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+}
+
+.tech-card {
+  background: white;
+  padding: 25px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+  text-align: center;
+  transition: transform 0.3s;
+  border-top: 4px solid #ddd;
+}
+
+.tech-card:hover {
+  transform: translateY(-5px);
+  border-color: #1877f2;
+}
+
+.tech-icon {
+  font-size: 2.5rem;
+  margin-bottom: 15px;
+  display: block;
+}
+
+.tech-card h3 { margin: 10px 0; color: #333; }
+.tech-card p { font-size: 0.9rem; color: #777; }
+
+/* SOBRE O AUTOR */
+.author-section {
+  background: white;
+  padding: 40px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  display: flex;
+  align-items: center;
+  gap: 30px;
+}
+
+.author-avatar {
+  width: 120px;
+  height: 120px;
+  background-color: #1877f2;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.author-info h2 { color: #1877f2; margin-bottom: 10px; }
+.author-info p { color: #555; line-height: 1.6; }
+
+/* AGRADECIMENTOS */
+.thanks-section {
+  text-align: center;
+  margin-top: 50px;
+  padding: 30px;
+  background-color: #f8f9fa;
+  border-radius: 12px;
+  font-style: italic;
+  color: #555;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Responsividade para celular */
+@media (max-width: 600px) {
+  .author-section { flex-direction: column; text-align: center; }
+  .sobre-header h1 { font-size: 2rem; }
+}
