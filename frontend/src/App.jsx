@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import Arvore from './pages/Arvore';
@@ -41,7 +41,8 @@ function App() {
             <Route path="/login" element={<Login setUser={setUser} />} />
             <Route path="/register" element={<Register />} />
             
-            <Route path="/admin" element={user ? <Admin /> : <div style={{padding:'50px', textAlign:'center', color:'red'}}><h2>Acesso Negado</h2></div>} />
+            {/* Passando user={user} para o componente Admin */}
+            <Route path="/admin" element={user ? <Admin user={user} /> : <div style={{padding:'50px', textAlign:'center', color:'red'}}><h2>Acesso Negado. Faça Login.</h2></div>} />
 
             <Route path="/sobre" element={<Sobre />} />
           </Routes>

@@ -26,4 +26,12 @@ urlpatterns = [
     # --- 5. RELACIONAMENTOS ---
     path('api/relacionar/', views.api_criar_relacionamento,
          name='api_criar_relacionamento'),
+
+    # --- 6. LOGS (Auditoria) ---
+    path('api/logs/', views.api_listar_logs, name='api_listar_logs'),
+
+    # --- 7. SOLICITAÇÕES ---
+    path('api/solicitacoes/', views.api_solicitacoes, name='api_solicitacoes'),
+    path('api/solicitacoes/<int:id>/', views.api_processar_solicitacao,
+         name='api_processar_solicitacao'),
 ]

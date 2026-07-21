@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import './Login.css'; // Reutilizamos o mesmo CSS para manter o padrão
+import './Login.css'; 
 
 function Register() {
   const [username, setUsername] = useState('');
@@ -24,8 +24,8 @@ function Register() {
         alert("Conta criada com sucesso! Agora faça login.");
         navigate('/login');
       } else {
-        const data = await response.json(); // Tenta pegar a mensagem de erro do Django
-        setError(data.message || "Erro ao criar conta.");
+        const erroTexto = await response.text(); 
+        setError(erroTexto || "Erro ao criar conta.");
       }
     } catch (err) {
       setError("Erro de conexão.");

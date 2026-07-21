@@ -6,13 +6,27 @@ from django.contrib.auth import authenticate, login, logout
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse, HttpResponseBadRequest, HttpResponseForbidden, HttpResponseNotFound
 from neomodel import db
-from datetime import datetime
-from .models import Pessoa, Evento, Comentario
+from .models import Pessoa, Evento, Comentario, RegistroAtividade, Solicitacao
+
+
+# ==========================================
+# FUNÇÃO AUXILIAR DE LOGS (Auditoria)
+# ==========================================
+def registrar_log(usuario, acao, entidade, detalhes):
+    """Salva uma ação no banco relacional (SQLite)"""
+    nome_usuario = usuario.username if hasattr(
+        usuario, 'username') else str(usuario)
+    RegistroAtividade.objects.create(
+        usuario=nome_usuario,
+        acao=acao,
+        entidade=entidade,
+        detalhes=detalhes
+    )
+
 
 # ==========================================
 # 1. AUTENTICAÇÃO E CONTA
 # ==========================================
-
 
 @csrf_exempt
 def api_registrar_usuario(request):
@@ -113,8 +127,6 @@ def api_grafo(request):
 # 3. API DE PESSOAS (CRUD + Auditoria)
 # ==========================================
 
-# backend/core/views.py
-
 @csrf_exempt
 def api_listar_pessoas(request):
     if request.method == 'GET':
@@ -150,19 +162,21 @@ def api_listar_pessoas(request):
                 criado_em=datetime.now().isoformat()
             ).save()
 
+            # --- LOG DE CRIAÇÃO ---
+            registrar_log(request.user, "Criou", "Pessoa",
+                          f"Cadastrou: {nova_pessoa.nomeCompleto}")
+
             # 3. AUTOMAÇÃO: EVENTO DE NASCIMENTO
             if data_nasc_obj:
                 evento_nasc = Evento(
                     tipo='Nascimento',
                     data=data_nasc_obj,
                     descricao=f"Nascimento de {nova_pessoa.nomeCompleto}",
-                    local="Local de Nascimento"  # Você pode adicionar campo para isso no futuro
+                    local="Local de Nascimento"
                 ).save()
-                # Conecta: Pessoa -> FOI -> Nascimento
                 nova_pessoa.participou.connect(evento_nasc)
 
-            # 4. AUTOMAÇÃO: PAIS (Se indicados)
-            # Nota: O relacionamento é PAI -> FILHO. Então buscamos o pai e conectamos nele.
+            # 4. AUTOMAÇÃO: PAIS
             uuid_pai = dados.get('pai_uuid')
             if uuid_pai:
                 pai = Pessoa.nodes.get(uuid=uuid_pai)
@@ -173,16 +187,12 @@ def api_listar_pessoas(request):
                 mae = Pessoa.nodes.get(uuid=uuid_mae)
                 mae.mae_de.connect(nova_pessoa)
 
-            # 5. AUTOMAÇÃO: CASAMENTO (Se indicado)
+            # 5. AUTOMAÇÃO: CASAMENTO
             uuid_conjuge = dados.get('conjuge_uuid')
             if uuid_conjuge:
                 conjuge = Pessoa.nodes.get(uuid=uuid_conjuge)
-
-                # Conecta Pessoa <-> Cônjuge (Casamento)
                 nova_pessoa.casado_com.connect(conjuge)
-                # Opcional: Criar bidirecional no Neo4j se quiser, mas uma via basta por enquanto.
 
-                # Cria Evento de Casamento (Se tiver data)
                 data_casamento_str = dados.get('dataCasamento')
                 if data_casamento_str:
                     try:
@@ -193,17 +203,14 @@ def api_listar_pessoas(request):
                             data=dt_casamento,
                             descricao=f"Casamento de {nova_pessoa.nomeCompleto} e {conjuge.nomeCompleto}"
                         ).save()
-
-                        # Conecta os DOIS ao evento
                         nova_pessoa.participou.connect(evento_casamento)
                         conjuge.participou.connect(evento_casamento)
                     except ValueError:
-                        pass  # Se a data for inválida, apenas ignora o evento, mas mantém o laço de casado
+                        pass
 
             return JsonResponse({'message': 'Pessoa e eventos automáticos criados!', 'uuid': nova_pessoa.uuid}, status=201)
 
         except Exception as e:
-            print(f"ERRO CRITICO: {str(e)}")
             return HttpResponseBadRequest(f"Erro ao processar: {str(e)}")
 
 
@@ -215,7 +222,6 @@ def api_detalhe_pessoa(request, uuid):
         return HttpResponseNotFound("Pessoa não encontrada")
 
     if request.method == 'GET':
-        # Busca eventos que a pessoa participou
         eventos_participados = []
         for evento in pessoa.participou.all():
             eventos_participados.append({
@@ -235,30 +241,33 @@ def api_detalhe_pessoa(request, uuid):
         })
 
     elif request.method == 'DELETE':
-        if not request.user.is_authenticated:
-            return HttpResponseForbidden("Faça login para excluir.")
+        # BLOQUEIO DE ADMIN
+        if not request.user.is_authenticated or not request.user.is_superuser:
+            return HttpResponseForbidden("Apenas administradores podem excluir.")
 
-        # VERIFICA PERMISSÃO (Dono ou Admin)
-        dono_id = getattr(pessoa, 'criado_por_id', None)
-        eh_dono = (dono_id == request.user.id)
-        eh_admin = request.user.is_superuser
+        nome_pessoa = pessoa.nomeCompleto
+        pessoa.delete()
 
-        if eh_dono or eh_admin:
-            pessoa.delete()
-            return JsonResponse({'message': 'Registro excluído.'})
-        else:
-            return HttpResponseForbidden("Você não tem permissão para excluir registros de outros usuários.")
+        # GERA O LOG
+        registrar_log(request.user, "Excluiu", "Pessoa",
+                      f"Apagou permanentemente a pessoa: {nome_pessoa}")
+        return JsonResponse({'message': 'Registro excluído.'})
 
     elif request.method == 'PUT':
-        # Para simplificar, permitimos editar sem verificar dono por enquanto,
-        # mas você pode adicionar a mesma lógica do DELETE aqui.
-        if not request.user.is_authenticated:
-            return HttpResponseForbidden("Faça login para editar.")
+        # BLOQUEIO DE ADMIN
+        if not request.user.is_authenticated or not request.user.is_superuser:
+            return HttpResponseForbidden("Apenas administradores podem editar.")
 
         dados = json.loads(request.body)
+        nome_antigo = pessoa.nomeCompleto
+
         pessoa.nomeCompleto = dados.get('nomeCompleto', pessoa.nomeCompleto)
         pessoa.apelido = dados.get('apelido', pessoa.apelido)
         pessoa.save()
+
+        # GERA O LOG
+        registrar_log(request.user, "Editou", "Pessoa",
+                      f"Alterou dados de: {nome_antigo}")
         return JsonResponse({'message': 'Dados atualizados!'})
 
 
@@ -276,7 +285,6 @@ def api_adicionar_comentario(request, uuid):
             dados = json.loads(request.body)
             texto = dados.get('texto')
 
-            # Cria nó Comentario e liga à Pessoa via Cypher
             query = """
             MATCH (p:Pessoa {uuid: $uuid_pessoa})
             CREATE (c:Comentario {
@@ -305,8 +313,6 @@ def api_adicionar_comentario(request, uuid):
 # 5. API DE EVENTOS
 # ==========================================
 
-# backend/core/views.py
-
 @csrf_exempt
 def api_listar_eventos(request):
     if request.method == 'GET':
@@ -327,14 +333,11 @@ def api_listar_eventos(request):
 
         try:
             dados = json.loads(request.body)
-
-            # --- CORREÇÃO DE DATA (Igual ao de Pessoas) ---
             data_str = dados.get('data')
             data_formatada = None
 
             if data_str:
                 try:
-                    # Converte "2023-12-25" para objeto Data do Python
                     data_formatada = datetime.strptime(
                         data_str, '%Y-%m-%d').date()
                 except ValueError:
@@ -342,15 +345,18 @@ def api_listar_eventos(request):
 
             novo_evento = Evento(
                 tipo=dados.get('tipo'),
-                data=data_formatada,  # <--- Agora passamos o objeto certo
+                data=data_formatada,
                 local=dados.get('local'),
                 descricao=dados.get('descricao')
             ).save()
 
+            # --- LOG DE CRIAÇÃO ---
+            registrar_log(request.user, "Criou", "Evento",
+                          f"Registrou o evento: {novo_evento.tipo}")
+
             return JsonResponse({'message': 'Evento criado!', 'uuid': novo_evento.uuid}, status=201)
 
         except Exception as e:
-            print(f"ERRO EVENTO: {str(e)}")  # Debug no terminal
             return HttpResponseBadRequest(f"Erro ao criar evento: {str(e)}")
 
 
@@ -362,7 +368,6 @@ def api_detalhe_evento(request, uuid):
         return HttpResponseNotFound("Evento não encontrado")
 
     if request.method == 'GET':
-        # Busca Participantes usando CYPHER
         query = """
         MATCH (p:Pessoa)-[]->(e:Evento {uuid: $uuid})
         RETURN p
@@ -386,6 +391,35 @@ def api_detalhe_evento(request, uuid):
             'participantes': participantes
         })
 
+    elif request.method == 'DELETE':
+        # BLOQUEIO DE ADMIN
+        if not request.user.is_authenticated or not request.user.is_superuser:
+            return HttpResponseForbidden("Apenas administradores podem excluir eventos.")
+
+        tipo_evento = evento.tipo
+        evento.delete()
+
+        registrar_log(request.user, "Excluiu", "Evento",
+                      f"Apagou permanentemente o evento: {tipo_evento}")
+        return JsonResponse({'message': 'Evento excluído.'})
+
+    elif request.method == 'PUT':
+        # BLOQUEIO DE ADMIN
+        if not request.user.is_authenticated or not request.user.is_superuser:
+            return HttpResponseForbidden("Apenas administradores podem editar eventos.")
+
+        dados = json.loads(request.body)
+        tipo_antigo = evento.tipo
+
+        evento.tipo = dados.get('tipo', evento.tipo)
+        evento.local = dados.get('local', evento.local)
+        evento.descricao = dados.get('descricao', evento.descricao)
+        evento.save()
+
+        registrar_log(request.user, "Editou", "Evento",
+                      f"Alterou dados do evento: {tipo_antigo}")
+        return JsonResponse({'message': 'Evento atualizado!'})
+
 
 # ==========================================
 # 6. API DE RELACIONAMENTOS
@@ -402,13 +436,13 @@ def api_criar_relacionamento(request):
             origem = Pessoa.nodes.get(uuid=dados['origem_uuid'])
             tipo = dados['tipo']
 
-            # Relacionamento Pessoa -> Evento
             if tipo == 'FOI':
                 destino = Evento.nodes.get(uuid=dados['destino_uuid'])
                 origem.participou.connect(destino)
+                registrar_log(request.user, "Criou Laço", "Relacionamento",
+                              f"Conectou {origem.nomeCompleto} ao evento {destino.tipo}")
                 return JsonResponse({'message': 'Presença confirmada!'})
 
-            # Relacionamento Pessoa -> Pessoa
             else:
                 destino = Pessoa.nodes.get(uuid=dados['destino_uuid'])
                 if tipo == 'PAI':
@@ -419,9 +453,135 @@ def api_criar_relacionamento(request):
                     origem.casado_com.connect(destino)
                 else:
                     return HttpResponseBadRequest("Tipo inválido")
+
+                registrar_log(request.user, "Criou Laço", "Relacionamento",
+                              f"Conectou {origem.nomeCompleto} como {tipo} de {destino.nomeCompleto}")
                 return JsonResponse({'message': f'Relacionamento {tipo} criado!'})
 
         except Exception as e:
             return HttpResponseBadRequest(f"Erro ao conectar: {str(e)}")
 
     return HttpResponseBadRequest("Método não permitido")
+
+
+# ==========================================
+# 7. API DE LOGS (Auditoria)
+# ==========================================
+
+@csrf_exempt
+def api_listar_logs(request):
+    if not request.user.is_authenticated or not request.user.is_superuser:
+        return HttpResponseForbidden("Acesso negado. Apenas administradores.")
+
+    logs = RegistroAtividade.objects.all()[:100]  # Pega os 100 mais recentes
+    data = [{
+        'id': log.id,
+        'usuario': log.usuario,
+        'acao': log.acao,
+        'entidade': log.entidade,
+        'detalhes': log.detalhes,
+        'data_hora': log.data_hora.strftime("%d/%m/%Y - %H:%M:%S")
+    } for log in logs]
+
+    return JsonResponse(data, safe=False)
+
+# ==========================================
+# 8. API DE SOLICITAÇÕES (Workflow de Aprovação)
+# ==========================================
+
+
+@csrf_exempt
+def api_solicitacoes(request):
+    # GET: Admin visualiza as pendentes
+    if request.method == 'GET':
+        if not request.user.is_authenticated or not request.user.is_superuser:
+            return HttpResponseForbidden("Apenas admins podem ver as solicitações.")
+
+        solicitacoes = Solicitacao.objects.filter(status='PENDENTE').values()
+        # Converte para lista para enviar no JSON
+        data = list(solicitacoes)
+        for s in data:
+            s['data_solicitacao'] = s['data_solicitacao'].strftime(
+                "%d/%m/%Y - %H:%M")
+        return JsonResponse(data, safe=False)
+
+    # POST: Usuário comum cria uma solicitação
+    elif request.method == 'POST':
+        if not request.user.is_authenticated:
+            return HttpResponseForbidden("Login necessário.")
+
+        try:
+            dados = json.loads(request.body)
+            # Salva a solicitação no banco
+            Solicitacao.objects.create(
+                usuario=request.user.username,
+                tipo_acao=dados['tipo_acao'],
+                entidade=dados['entidade'],
+                uuid_entidade=dados['uuid_entidade'],
+                motivo=dados['motivo'],
+                dados_novos=json.dumps(dados.get('dados_novos', {}))
+            )
+
+            registrar_log(request.user, "Solicitou",
+                          dados['entidade'], f"Pediu para {dados['tipo_acao']} - Motivo: {dados['motivo']}")
+            return JsonResponse({'message': 'Solicitação enviada aos administradores!'})
+        except Exception as e:
+            return HttpResponseBadRequest(f"Erro ao solicitar: {str(e)}")
+
+
+@csrf_exempt
+def api_processar_solicitacao(request, id):
+    """Admin aprova ou nega uma solicitação"""
+    if request.method == 'PUT':
+        if not request.user.is_authenticated or not request.user.is_superuser:
+            return HttpResponseForbidden("Apenas admins.")
+
+        try:
+            dados = json.loads(request.body)
+            acao_admin = dados.get('acao')  # 'APROVAR' ou 'NEGAR'
+            solicitacao = Solicitacao.objects.get(id=id)
+
+            if acao_admin == 'NEGAR':
+                solicitacao.status = 'NEGADA'
+                solicitacao.save()
+                registrar_log(request.user, "Negou", "Solicitação",
+                              f"Negou pedido de {solicitacao.usuario}")
+                return JsonResponse({'message': 'Solicitação negada.'})
+
+            elif acao_admin == 'APROVAR':
+                # 1. Busca o nó correto no Neo4j
+                if solicitacao.entidade == 'Pessoa':
+                    node = Pessoa.nodes.get(uuid=solicitacao.uuid_entidade)
+                else:
+                    node = Evento.nodes.get(uuid=solicitacao.uuid_entidade)
+
+                # 2. Executa a Ação (Excluir ou Editar)
+                if solicitacao.tipo_acao == 'Excluir':
+                    nome_registro = getattr(
+                        node, 'nomeCompleto', getattr(node, 'tipo', 'Registro'))
+                    node.delete()
+                    registrar_log(request.user, "Excluiu", solicitacao.entidade,
+                                  f"Excluiu {nome_registro} após aprovar solicitação")
+
+                elif solicitacao.tipo_acao == 'Editar':
+                    novos_dados = json.loads(solicitacao.dados_novos)
+                    if solicitacao.entidade == 'Pessoa':
+                        node.nomeCompleto = novos_dados.get(
+                            'nomeCompleto', node.nomeCompleto)
+                        node.apelido = novos_dados.get('apelido', node.apelido)
+                    else:
+                        node.tipo = novos_dados.get('tipo', node.tipo)
+                        node.local = novos_dados.get('local', node.local)
+                        node.descricao = novos_dados.get(
+                            'descricao', node.descricao)
+                    node.save()
+                    registrar_log(request.user, "Editou", solicitacao.entidade,
+                                  f"Editou registro após aprovar solicitação")
+
+                # 3. Atualiza o status
+                solicitacao.status = 'APROVADA'
+                solicitacao.save()
+                return JsonResponse({'message': 'Solicitação aprovada e aplicada ao grafo.'})
+
+        except Exception as e:
+            return HttpResponseBadRequest(f"Erro ao processar: {str(e)}")
