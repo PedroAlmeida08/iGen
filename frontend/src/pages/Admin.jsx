@@ -204,7 +204,6 @@ function Admin({ user }) {
             <button className={`tab-btn ${activeTab === 'aprovacoes' ? 'active' : ''}`} onClick={() => {setActiveTab('aprovacoes'); setMsg(''); carregarDadosAdmin();}} style={{marginLeft: 'auto', backgroundColor: activeTab === 'aprovacoes' ? '#fff3e0' : 'transparent', color: activeTab === 'aprovacoes' ? '#e65100' : 'inherit'}}>
               🔔 Aprovações {listaSolicitacoes.length > 0 && `(${listaSolicitacoes.length})`}
             </button>
-            {/* O BOTÃO DE AUDITORIA AGORA HERDA AS CORES PADRÕES */}
             <button className={`tab-btn ${activeTab === 'logs' ? 'active' : ''}`} onClick={() => {setActiveTab('logs'); setMsg(''); carregarDadosAdmin();}}>
               📜 Auditoria
             </button>
@@ -244,23 +243,37 @@ function Admin({ user }) {
           <form onSubmit={salvarRelacionamento}>
             <h2 className="form-title">Conectar Nós (Manual)</h2>
             <div className="form-group"><label>Origem</label><select required onChange={e => setFormRelacao({...formRelacao, origem_uuid: e.target.value})}><option value="">Selecione...</option>{listaPessoas.map(p => <option key={p.uuid} value={p.uuid}>{p.nome}</option>)}</select></div>
-            <div className="form-group"><label>Relação</label><select value={formRelacao.tipo} onChange={e => setFormRelacao({...formRelacao, tipo: e.target.value})}><option value="PAI">É Pai de</option><option value="MAE">É Mãe de</option><option value="CASADO">É Casado com</option><option value="FOI">Esteve no Evento</option></select></div>
+            <div className="form-group">
+              <label>Relação</label>
+              <select value={formRelacao.tipo} onChange={e => setFormRelacao({...formRelacao, tipo: e.target.value})}>
+                <option value="PAI">É Pai de</option>
+                <option value="MAE">É Mãe de</option>
+                <option value="CASADO">É Casado com</option>
+                <option value="IRMAO">É Irmã(o) de</option> {/* NOVO LAÇO AQUI */}
+                <option value="FOI">Esteve no Evento</option>
+              </select>
+            </div>
             <div className="form-group"><label>Destino</label><select required onChange={e => setFormRelacao({...formRelacao, destino_uuid: e.target.value})}><option value="">Selecione...</option>{formRelacao.tipo === 'FOI' ? listaEventos.map(e => <option key={e.uuid} value={e.uuid}>{e.data} - {e.tipo}</option>) : listaPessoas.map(p => <option key={p.uuid} value={p.uuid}>{p.nome}</option>)}</select></div>
             <button type="submit" className="submit-btn" style={{backgroundColor: '#1877f2'}}>Criar Conexão</button>
           </form>
         )}
 
-        {/* --- ABA 4: GERENCIAR (Com edição para todos) --- */}
+        {/* --- ABA 4: GERENCIAR --- */}
         {activeTab === 'gerenciar' && (
           <div>
             <h2 className="form-title">Gerenciar Registros</h2>
             <p style={{color: '#666', marginBottom: '20px'}}>{user && user.is_admin ? "Como admin, suas edições são imediatas." : "Você pode solicitar edições que serão revisadas pelos administradores."}</p>
 
-            {/* TABELA DE PESSOAS */}
             <h3 style={{marginBottom: '10px', color: '#333'}}>Pessoas</h3>
             <div style={{overflowX: 'auto', background: '#fff', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', marginBottom: '30px'}}>
               <table style={{width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem'}}>
-                <thead><tr style={{background: '#f8f9fa', borderBottom: '2px solid #dee2e6'}}><th style={{padding: '12px'}}>Nome</th><th style={{padding: '12px'}}>Apelido</th><th style={{padding: '12px', textAlign: 'right'}}>Ações</th></tr></thead>
+                <thead>
+                  <tr style={{background: '#f8f9fa', borderBottom: '2px solid #dee2e6'}}>
+                    <th style={{padding: '12px', whiteSpace: 'nowrap'}}>Nome</th>
+                    <th style={{padding: '12px', whiteSpace: 'nowrap'}}>Apelido</th>
+                    <th style={{padding: '12px', textAlign: 'right', whiteSpace: 'nowrap'}}>Ações</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {listaPessoas.map(p => (
                     <tr key={p.uuid} style={{borderBottom: '1px solid #e9ecef'}}>
@@ -275,9 +288,9 @@ function Admin({ user }) {
                         </td>
                       ) : (
                         <>
-                          <td style={{padding: '12px'}}>{p.nome}</td>
-                          <td style={{padding: '12px'}}>{p.apelido || '-'}</td>
-                          <td style={{padding: '12px', textAlign: 'right'}}>
+                          <td style={{padding: '12px', whiteSpace: 'nowrap'}}>{p.nome}</td>
+                          <td style={{padding: '12px', whiteSpace: 'nowrap'}}>{p.apelido || '-'}</td>
+                          <td style={{padding: '12px', textAlign: 'right', whiteSpace: 'nowrap'}}>
                             <button onClick={() => setEditandoPessoa({uuid: p.uuid, nomeCompleto: p.nome, apelido: p.apelido})} style={{padding: '5px 10px', marginRight: '5px', background: '#ffb300', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>Editar</button>
                             <button onClick={() => dispararAcaoExclusao('Pessoa', p.uuid)} style={{padding: '5px 10px', background: '#d32f2f', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>Excluir</button>
                           </td>
@@ -289,11 +302,17 @@ function Admin({ user }) {
               </table>
             </div>
 
-            {/* TABELA DE EVENTOS */}
             <h3 style={{marginBottom: '10px', color: '#333'}}>Eventos</h3>
             <div style={{overflowX: 'auto', background: '#fff', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)'}}>
               <table style={{width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem'}}>
-                <thead><tr style={{background: '#f8f9fa', borderBottom: '2px solid #dee2e6'}}><th style={{padding: '12px'}}>Tipo</th><th style={{padding: '12px'}}>Data</th><th style={{padding: '12px'}}>Local</th><th style={{padding: '12px', textAlign: 'right'}}>Ações</th></tr></thead>
+                <thead>
+                  <tr style={{background: '#f8f9fa', borderBottom: '2px solid #dee2e6'}}>
+                    <th style={{padding: '12px', whiteSpace: 'nowrap'}}>Tipo</th>
+                    <th style={{padding: '12px', whiteSpace: 'nowrap'}}>Data</th>
+                    <th style={{padding: '12px', whiteSpace: 'nowrap'}}>Local</th>
+                    <th style={{padding: '12px', textAlign: 'right', whiteSpace: 'nowrap'}}>Ações</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {listaEventos.map(e => (
                     <tr key={e.uuid} style={{borderBottom: '1px solid #e9ecef'}}>
@@ -308,10 +327,10 @@ function Admin({ user }) {
                         </td>
                       ) : (
                         <>
-                          <td style={{padding: '12px', fontWeight: 'bold'}}>{e.tipo}</td>
-                          <td style={{padding: '12px'}}>{e.data}</td>
-                          <td style={{padding: '12px'}}>{e.local || '-'}</td>
-                          <td style={{padding: '12px', textAlign: 'right'}}>
+                          <td style={{padding: '12px', fontWeight: 'bold', whiteSpace: 'nowrap'}}>{e.tipo}</td>
+                          <td style={{padding: '12px', whiteSpace: 'nowrap'}}>{e.data}</td>
+                          <td style={{padding: '12px', whiteSpace: 'nowrap'}}>{e.local || '-'}</td>
+                          <td style={{padding: '12px', textAlign: 'right', whiteSpace: 'nowrap'}}>
                             <button onClick={() => setEditandoEvento({uuid: e.uuid, tipo: e.tipo, local: e.local})} style={{padding: '5px 10px', marginRight: '5px', background: '#ffb300', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>Editar</button>
                             <button onClick={() => dispararAcaoExclusao('Evento', e.uuid)} style={{padding: '5px 10px', background: '#d32f2f', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>Excluir</button>
                           </td>
@@ -325,7 +344,7 @@ function Admin({ user }) {
           </div>
         )}
 
-        {/* --- ABA 5: APROVAÇÕES (ADMIN) --- */}
+        {/* --- ABA 5: APROVAÇÕES --- */}
         {activeTab === 'aprovacoes' && (
           <div>
             <h2 className="form-title">Pedidos de Moderação</h2>
@@ -355,14 +374,25 @@ function Admin({ user }) {
             <h2 className="form-title">Auditoria (Logs)</h2>
             <div style={{overflowX: 'auto', background: '#fff', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)'}}>
               <table style={{width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem'}}>
-                <thead><tr style={{background: '#f8f9fa', borderBottom: '2px solid #dee2e6'}}><th style={{padding: '12px 15px'}}>Data/Hora</th><th style={{padding: '12px 15px'}}>Usuário</th><th style={{padding: '12px 15px'}}>Ação</th><th style={{padding: '12px 15px'}}>Entidade</th><th style={{padding: '12px 15px'}}>Detalhes</th></tr></thead>
+                <thead>
+                  <tr style={{background: '#f8f9fa', borderBottom: '2px solid #dee2e6'}}>
+                    {/* whiteSpace: 'nowrap' forçará a tabela a não quebrar linhas nesses campos */}
+                    <th style={{padding: '12px 15px', whiteSpace: 'nowrap'}}>Data/Hora</th>
+                    <th style={{padding: '12px 15px', whiteSpace: 'nowrap'}}>Usuário</th>
+                    <th style={{padding: '12px 15px', whiteSpace: 'nowrap'}}>Ação</th>
+                    <th style={{padding: '12px 15px', whiteSpace: 'nowrap'}}>Entidade</th>
+                    <th style={{padding: '12px 15px', width: '100%'}}>Detalhes</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {listaLogs.length === 0 ? <tr><td colSpan="5" style={{padding: '20px', textAlign: 'center'}}>Nenhum registro.</td></tr> : listaLogs.map(log => (
                       <tr key={log.id} style={{borderBottom: '1px solid #e9ecef'}}>
                         <td style={{padding: '12px 15px', whiteSpace: 'nowrap'}}>{log.data_hora}</td>
-                        <td style={{padding: '12px 15px', fontWeight: 'bold'}}>{log.usuario}</td>
-                        <td style={{padding: '12px 15px'}}><span style={{padding: '4px 8px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold', backgroundColor: log.acao === 'Excluiu' ? '#ffebee' : log.acao === 'Editou' ? '#e3f2fd' : '#e8f5e9', color: log.acao === 'Excluiu' ? '#c62828' : log.acao === 'Editou' ? '#1565c0' : '#2e7d32'}}>{log.acao}</span></td>
-                        <td style={{padding: '12px 15px'}}>{log.entidade}</td>
+                        <td style={{padding: '12px 15px', fontWeight: 'bold', whiteSpace: 'nowrap'}}>{log.usuario}</td>
+                        <td style={{padding: '12px 15px', whiteSpace: 'nowrap'}}>
+                          <span style={{padding: '4px 8px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold', backgroundColor: log.acao === 'Excluiu' ? '#ffebee' : log.acao === 'Editou' ? '#e3f2fd' : '#e8f5e9', color: log.acao === 'Excluiu' ? '#c62828' : log.acao === 'Editou' ? '#1565c0' : '#2e7d32'}}>{log.acao}</span>
+                        </td>
+                        <td style={{padding: '12px 15px', whiteSpace: 'nowrap'}}>{log.entidade}</td>
                         <td style={{padding: '12px 15px', color: '#555'}}>{log.detalhes}</td>
                       </tr>
                   ))}

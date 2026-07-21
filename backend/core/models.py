@@ -5,6 +5,7 @@ from neomodel import (
     StringProperty,
     DateProperty,
     UniqueIdProperty,
+    Relationship,
     RelationshipTo,
     IntegerProperty,
     RelationshipFrom
@@ -35,6 +36,7 @@ class Pessoa(StructuredNode):
 
     pai_de = RelationshipTo('Pessoa', 'PAI')
     mae_de = RelationshipTo('Pessoa', 'MAE')
+    irmao_de = Relationship('Pessoa', 'IRMAO')
     casado_com = RelationshipTo('Pessoa', 'CASADO')
     participou = RelationshipTo('Evento', 'FOI')
     comentarios = RelationshipFrom('Comentario', 'SOBRE')

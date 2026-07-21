@@ -116,6 +116,14 @@ def api_grafo(request):
         for evento in p.participou.all():
             edges.append({'from': p.uuid, 'to': evento.uuid, 'label': 'FOI'})
 
+        # NOVO: Renderiza a linha de Irmão na Árvore Genealógica
+        for irmao in p.irmao_de.all():
+            # Como a relação de irmão é dupla, evitamos desenhar duas setas iguais
+            # verificando se a aresta inversa já não existe na lista.
+            if not any(e['from'] == irmao.uuid and e['to'] == p.uuid and e['label'] == 'IRMAO' for e in edges):
+                edges.append(
+                    {'from': p.uuid, 'to': irmao.uuid, 'label': 'IRMAO'})
+
     # Nós de Eventos
     for e in eventos:
         nodes.append({'id': e.uuid, 'label': e.tipo, 'group': 'evento'})
@@ -451,6 +459,9 @@ def api_criar_relacionamento(request):
                     origem.mae_de.connect(destino)
                 elif tipo == 'CASADO':
                     origem.casado_com.connect(destino)
+                elif tipo == 'IRMAO':
+                    origem.irmao_de.connect(destino)
+                    destino.irmao_de.connect(origem)
                 else:
                     return HttpResponseBadRequest("Tipo inválido")
 
