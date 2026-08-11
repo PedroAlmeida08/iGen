@@ -1,90 +1,164 @@
-/* frontend/src/pages/Arvore.css */
+.arvore-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 80px); /* Altura total menos a navbar */
+  background-color: #f8f9fa;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  margin: 10px;
+}
 
-.arvore-container {
+.arvore-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 25px;
+  background-color: white;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.arvore-toolbar h2 {
+  margin: 0;
+  color: #1877f2;
+  font-size: 1.4rem;
+}
+
+/* --- NOVAS CLASSES DA BARRA DE BUSCA E FERRAMENTAS --- */
+.toolbar-actions {
+  display: flex;
+  gap: 15px; /* Espaço entre a barra de busca e o botão de eventos */
+  align-items: center;
+}
+
+.search-box input {
+  padding: 10px 18px;
+  border: 1px solid #d1d5db;
+  border-radius: 20px;
+  font-size: 0.95rem;
+  outline: none;
+  width: 250px;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.search-box input:focus {
+  border-color: #1877f2;
+  box-shadow: 0 0 0 3px rgba(24, 119, 242, 0.15);
+}
+/* ----------------------------------------------------- */
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  color: #555;
+  cursor: pointer;
+  background: #f1f3f5;
+  padding: 8px 15px;
+  border-radius: 20px;
+  transition: 0.2s;
+}
+
+.toggle-label:hover {
+  background: #e2e6ea;
+}
+
+.arvore-content {
+  display: flex;
+  flex: 1;
   position: relative;
-  width: 100%;
-  height: calc(100vh - 70px); /* Altura total menos a Navbar */
-  background-color: #f0f2f5;
   overflow: hidden;
 }
 
-/* Área do Grafo */
-.graph-area {
-  width: 100%;
+/* Onde o grafo é desenhado */
+.grafo-container {
+  flex: 1;
   height: 100%;
+  outline: none; /* Remove a borda azul ao clicar */
 }
 
-/* Painel Lateral de Detalhes */
-.details-panel {
-  position: absolute;
-  top: 20px;
-  right: 20px;
+/* Sidebar lateral */
+.sidebar-detalhes {
   width: 350px;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+  background-color: white;
+  border-left: 1px solid #e9ecef;
+  box-shadow: -5px 0 15px rgba(0,0,0,0.03);
   padding: 25px;
-  z-index: 10;
-  border-left: 5px solid #1877f2;
+  overflow-y: auto;
   animation: slideIn 0.3s ease-out;
+  position: relative;
 }
 
 @keyframes slideIn {
-  from { opacity: 0; transform: translateX(20px); }
-  to { opacity: 1; transform: translateX(0); }
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
 }
 
-.details-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 15px;
-  border-bottom: 1px solid #eee;
-  padding-bottom: 10px;
-}
-
-.details-header h2 {
-  font-size: 1.4rem;
-  color: #333;
-  margin: 0;
-}
-
-.close-btn {
+.btn-fechar {
+  position: absolute;
+  top: 15px;
+  right: 15px;
   background: none;
   border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
-  color: #999;
-}
-.close-btn:hover { color: #d00; }
-
-.info-group { margin-bottom: 15px; }
-.info-label { font-size: 0.85rem; color: #777; font-weight: bold; text-transform: uppercase; }
-.info-value { font-size: 1.1rem; color: #333; }
-
-/* Lista de Eventos no Painel */
-.events-list {
-  margin-top: 20px;
-  background: #f9f9f9;
-  padding: 10px;
-  border-radius: 8px;
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.event-item {
-  font-size: 0.9rem;
-  padding: 8px 0;
-  border-bottom: 1px solid #eee;
-}
-.event-item:last-child { border-bottom: none; }
-.event-date { font-weight: bold; color: #e67e22; margin-right: 5px; }
-
-/* Loading */
-.loading-msg {
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
   font-size: 1.2rem;
-  color: #666;
+  color: #aaa;
+  cursor: pointer;
+}
+
+.btn-fechar:hover {
+  color: #d32f2f;
+}
+
+.detalhes-info h3 {
+  color: #333;
+  margin-top: 10px;
+  margin-bottom: 5px;
+  font-size: 1.5rem;
+}
+
+.badge {
+  display: inline-block;
+  background-color: #eef4ff;
+  color: #1877f2;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+.detalhes-info.evento h3 {
+  color: #e65100;
+}
+
+.mt-4 {
+  margin-top: 25px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 5px;
+  color: #444;
+}
+
+.descricao-box {
+  background-color: #fff9c4;
+  padding: 12px;
+  border-radius: 6px;
+  font-style: italic;
+  color: #555;
+  border-left: 3px solid #fbc02d;
+}
+
+.lista-eventos, .lista-participantes {
+  list-style: none;
+  padding: 0;
+}
+
+.lista-eventos li, .lista-participantes li {
+  padding: 10px;
+  background: #f8f9fa;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  border: 1px solid #eee;
 }

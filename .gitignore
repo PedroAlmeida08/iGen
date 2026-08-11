@@ -2,9 +2,9 @@
 .env
 .env.*
 
-# Pastas de Dependências e Ambientes Virtuais
-*/venv/
-*/node_modules/
+# Pastas de Dependências e Ambientes Virtuais (Removido o */ da frente)
+venv/
+node_modules/
 
 # Arquivos de Cache e Bytecode do Python
 __pycache__/
@@ -23,8 +23,8 @@ __pycache__/
 *.db
 
 # Arquivos de Configuração de IDEs
-.vscode/
 .idea/
+# .vscode/
 
 # Arquivos de Sistema Operacional
 .DS_Store
