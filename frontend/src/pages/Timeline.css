@@ -95,3 +95,94 @@
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
 }
+
+.timeline-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  align-items: flex-end;
+  background-color: #ffffff; 
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 40px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.filter-group label {
+  font-size: 0.85rem;
+  font-weight: bold;
+  color: #555;
+}
+
+.filter-input {
+  padding: 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  outline: none;
+  font-size: 0.95rem;
+  color: #333;
+  min-width: 180px;
+  background-color: #ffffff;
+}
+
+.filter-input:focus {
+  border-color: #1877f2;
+  box-shadow: 0 0 0 2px rgba(24, 119, 242, 0.15);
+}
+
+.btn-limpar {
+  padding: 10px 15px;
+  height: 41px;
+  background-color: #e0e0e0;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  color: #333;
+  transition: background 0.2s;
+}
+
+.btn-limpar:hover {
+  background-color: #d1d1d1;
+}
+
+/* ========================================================= */
+/* CUSTOMIZAÇÃO DE SCROLLBAR (TEMA CLARO GLOBAL)             */
+/* ========================================================= */
+
+/* Para navegadores baseados em Chromium (Chrome, Edge, Opera) */
+::-webkit-scrollbar {
+  width: 8px; /* Largura da barra vertical */
+  height: 8px; /* Altura da barra horizontal */
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1; /* Cor do fundo / trilha */
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cccccc; /* Cor da barrinha solta */
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8; /* Cor quando passa o mouse por cima */
+}
+
+/* Suporte para Firefox e selects nativos */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cccccc #f1f1f1;
+}
+
+select {
+  /* Força a cor clara nas opções de select no Windows */
+  color-scheme: light;
+}

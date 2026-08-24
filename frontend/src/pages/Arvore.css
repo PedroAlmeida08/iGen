@@ -24,10 +24,9 @@
   font-size: 1.4rem;
 }
 
-/* --- NOVAS CLASSES DA BARRA DE BUSCA E FERRAMENTAS --- */
 .toolbar-actions {
   display: flex;
-  gap: 15px; /* Espaço entre a barra de busca e o botão de eventos */
+  gap: 15px;
   align-items: center;
 }
 
@@ -37,16 +36,18 @@
   border-radius: 20px;
   font-size: 0.95rem;
   outline: none;
-  width: 250px;
+  width: 280px;
   transition: all 0.2s ease;
   font-family: inherit;
+  background-color: #f8f9fa;
+  color: #333;
 }
 
 .search-box input:focus {
   border-color: #1877f2;
+  background-color: #ffffff;
   box-shadow: 0 0 0 3px rgba(24, 119, 242, 0.15);
 }
-/* ----------------------------------------------------- */
 
 .toggle-label {
   display: flex;

@@ -5,6 +5,11 @@
   min-height: 80vh; /* Garante centralização vertical */
 }
 
+.login-container form input{
+  color: #333;
+  background-color: white;
+}
+
 .login-box {
   background: white;
   padding: 40px;

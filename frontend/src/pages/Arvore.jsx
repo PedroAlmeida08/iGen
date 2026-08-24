@@ -1,36 +1,25 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import ReactFlow, { Controls, Background, applyNodeChanges, applyEdgeChanges } from 'reactflow';
+import ReactFlow, { Controls, Background, MarkerType, applyNodeChanges, applyEdgeChanges } from 'reactflow';
 import dagre from 'dagre';
 import 'reactflow/dist/style.css';
 import './Arvore.css';
-import PessoaNode from '../components/PessoaNode';
-
-// Registrando os Custom Nodes para o React Flow
-const nodeTypes = { pessoa: PessoaNode };
 
 // =========================================================
-// MOTOR DE LAYOUT (DAGRE)
+// MOTOR DE LAYOUT BÁSICO (DAGRE)
 // =========================================================
 const getLayoutedElements = (nodes, edges) => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   
-  // Aumentei o ranksep (distância vertical) para dar mais respiro aos galhos
-  dagreGraph.setGraph({ rankdir: 'TB', nodesep: 60, ranksep: 100 });
+  dagreGraph.setGraph({ rankdir: 'TB', nodesep: 80, ranksep: 100 });
 
   nodes.forEach((node) => {
-    // Ajustado para o novo tamanho do Custom Node
-    if (node.id.startsWith('uniao_')) {
-      dagreGraph.setNode(node.id, { width: 10, height: 10 });
-    } else {
-      dagreGraph.setNode(node.id, { width: 220, height: 70 });
-    }
+    // Aumentamos levemente a altura para caber o apelido confortavelmente
+    dagreGraph.setNode(node.id, { width: 160, height: 70 });
   });
 
   edges.forEach((edge) => {
-    dagreGraph.setEdge(edge.source, edge.target, { 
-      minlen: edge.data?.minlen !== undefined ? edge.data.minlen : 1 
-    });
+    dagreGraph.setEdge(edge.source, edge.target);
   });
 
   dagre.layout(dagreGraph);
@@ -42,8 +31,8 @@ const getLayoutedElements = (nodes, edges) => {
       targetPosition: 'top',
       sourcePosition: 'bottom',
       position: {
-        x: nodeWithPosition.x - (node.id.startsWith('uniao_') ? 5 : 110),
-        y: nodeWithPosition.y - (node.id.startsWith('uniao_') ? 5 : 35),
+        x: nodeWithPosition.x - 80,
+        y: nodeWithPosition.y - 35,
       },
     };
   });
@@ -53,7 +42,6 @@ const getLayoutedElements = (nodes, edges) => {
 
 function Arvore() {
   const [grafoDados, setGrafoDados] = useState({ nodes: [], edges: [] });
-  const [mostrarEventos, setMostrarEventos] = useState(false);
   const [buscaNome, setBuscaNome] = useState('');
   
   const [nodes, setNodes] = useState([]);
@@ -84,146 +72,100 @@ function Arvore() {
   useEffect(() => {
     if (grafoDados.nodes.length === 0) return;
 
-    let nosBackend = [...grafoDados.nodes];
-    let arestasBackend = [...grafoDados.edges];
+    let nosBackend = grafoDados.nodes.filter(n => n.group === 'pessoa');
+    
+    let arestasBackend = grafoDados.edges.filter(e => {
+      const fromExiste = nosBackend.find(n => n.id === e.from);
+      const toExiste = nosBackend.find(n => n.id === e.to);
+      return fromExiste && toExiste;
+    });
 
-    // Elimina as linhas de irmãos para manter o layout limpo (Genograma)
-    arestasBackend = arestasBackend.filter(e => e.label !== 'IRMAO');
+    // --- APLICA FILTRO DE BUSCA (NOME OU APELIDO) ---
+    if (buscaNome.trim() !== '') {
+      const termo = buscaNome.toLowerCase();
+      const pessoasEncontradas = nosBackend.filter(n => {
+        const nomeMatch = n.label && n.label.toLowerCase().includes(termo);
+        const apelidoMatch = n.apelido && n.apelido.toLowerCase().includes(termo);
+        return nomeMatch || apelidoMatch;
+      });
+      
+      const idsEncontrados = pessoasEncontradas.map(n => n.id);
 
-    // Removemos os nós de evento fisicamente apenas se o toggle estiver desligado
-    if (!mostrarEventos) {
-      nosBackend = nosBackend.filter(n => n.group !== 'evento');
-      const idsPermitidos = nosBackend.map(n => n.id);
-      arestasBackend = arestasBackend.filter(e => 
-        idsPermitidos.includes(e.from) && idsPermitidos.includes(e.to)
-      );
+      if (idsEncontrados.length > 0) {
+        arestasBackend = arestasBackend.filter(e => idsEncontrados.includes(e.from) || idsEncontrados.includes(e.to));
+        const idsConectados = new Set();
+        arestasBackend.forEach(e => {
+          idsConectados.add(e.from);
+          idsConectados.add(e.to);
+        });
+        nosBackend = nosBackend.filter(n => idsConectados.has(n.id) || idsEncontrados.includes(n.id));
+      } else {
+        nosBackend = [];
+        arestasBackend = [];
+      }
     }
 
-    let flowNodes = [];
-    let flowEdges = [];
-    const arestasParaRemover = new Set();
-    const termoBusca = buscaNome.trim().toLowerCase();
-
-    // =========================================================
-    // MAPEAMENTO DOS NÓS
-    // =========================================================
-    nosBackend.forEach(n => {
+    // --- CONSTRUÇÃO DOS NÓS COM NOME E APELIDO ---
+    let flowNodes = nosBackend.map(n => {
       const isPessoa = n.group === 'pessoa';
-      // Se não houver busca, todo mundo é "match". Se houver, verifica o nome.
-      const isMatch = termoBusca === '' ? true : n.label.toLowerCase().includes(termoBusca);
-
-      if (isPessoa) {
-        flowNodes.push({
-          id: n.id,
-          type: 'pessoa', // Usa o nosso Custom Node!
-          data: { 
-            label: n.label, 
-            apelido: n.apelido, 
-            originalGroup: n.group,
-            isMatch: isMatch 
-          }
-        });
-      } else {
-        // Nós de evento continuam como padrão, mas recebem estilo esmaecido na busca
-        flowNodes.push({
-          id: n.id,
-          type: 'default',
-          data: { label: n.label, originalGroup: n.group },
-          style: {
-            background: '#fff3e0',
-            border: '2px solid #ff9800',
-            borderRadius: '8px',
-            padding: '10px',
-            color: '#e65100',
-            fontWeight: 'bold',
-            opacity: isMatch ? 1 : 0.2, // Esmaece se não bater com a busca
-            transition: 'opacity 0.3s ease'
-          }
-        });
-      }
+      
+      return {
+        id: n.id,
+        data: { 
+          // O label agora é um mini-componente JSX com o nome e o apelido
+          label: (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+              <span>{n.label}</span>
+              {n.apelido && (
+                <span style={{ fontSize: '11px', fontWeight: '500', fontStyle: 'italic', color: '#6ea8f5' }}>
+                  "{n.apelido}"
+                </span>
+              )}
+            </div>
+          ), 
+          originalGroup: n.group 
+        },
+        style: {
+          background: '#eef4ff',
+          border: '2px solid #1877f2',
+          borderRadius: '8px',
+          width: 160,
+          padding: '10px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '13px',
+          fontWeight: 'bold',
+          textAlign: 'center',
+          color: '#1877f2',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
+        }
+      };
     });
 
-    // =========================================================
-    // MAPEAMENTO DAS ARESTAS (LINHAS)
-    // =========================================================
-    const casamentos = arestasBackend.filter(e => e.label === 'CASADO');
-    
-    casamentos.forEach(casamento => {
-      const uniaoId = `uniao_${casamento.from}_${casamento.to}`;
-      
-      flowNodes.push({
-        id: uniaoId,
-        data: { label: '' },
-        style: { width: 8, height: 8, background: '#94a3b8', border: 'none', borderRadius: '50%', padding: 0 }
-      });
-
-      flowEdges.push({ 
-        id: `e_${casamento.from}-${uniaoId}`, 
-        source: casamento.from, 
-        target: uniaoId, 
-        type: 'smoothstep', 
-        data: { minlen: 0 }, 
-        style: { stroke: '#cbd5e1', strokeWidth: 2 } 
-      });
-      
-      flowEdges.push({ 
-        id: `e_${casamento.to}-${uniaoId}`, 
-        source: casamento.to, 
-        target: uniaoId, 
-        type: 'smoothstep', 
-        data: { minlen: 0 }, 
-        style: { stroke: '#cbd5e1', strokeWidth: 2 } 
-      });
-      
-      arestasParaRemover.add(casamento);
-
-      const filhosDoCasal = arestasBackend.filter(e => (e.from === casamento.from || e.from === casamento.to) && (e.label === 'PAI' || e.label === 'MAE'));
-      const filhosIds = [...new Set(filhosDoCasal.map(e => e.to))];
-
-      filhosIds.forEach(filhoId => {
-        flowEdges.push({
-          id: `e_${uniaoId}-${filhoId}`,
-          source: uniaoId,
-          target: filhoId,
-          type: 'smoothstep', // Substituído de 'step' para 'smoothstep'
-          style: { stroke: '#94a3b8', strokeWidth: 2 }
-        });
-      });
-
-      filhosDoCasal.forEach(e => arestasParaRemover.add(e));
-    });
-
-    arestasBackend.forEach(e => {
-      if (!arestasParaRemover.has(e)) {
-        flowEdges.push({
-          id: `e_${e.from}-${e.to}`,
-          source: e.from,
-          target: e.to,
-          type: 'smoothstep', // Linhas mais orgânicas
-          style: { stroke: '#cbd5e1', strokeWidth: 2 },
-        });
-      }
-    });
+    let flowEdges = arestasBackend.map(e => ({
+      id: `e_${e.from}-${e.to}_${e.label}`,
+      source: e.from,
+      target: e.to,
+      label: e.label,
+      type: 'smoothstep',
+      style: { stroke: '#999', strokeWidth: 1.5, strokeDasharray: e.label === 'CASADO' ? '5 5' : 'none' },
+      markerEnd: { type: MarkerType.ArrowClosed, color: '#999' },
+    }));
 
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(flowNodes, flowEdges);
     
     setNodes(layoutedNodes);
     setEdges(layoutedEdges);
 
-  }, [grafoDados, mostrarEventos, buscaNome]);
+  }, [grafoDados, buscaNome]);
 
   const onNodeClick = async (event, node) => {
-    // Ignora o clique se for o nó invisível de casamento
-    if (node.id.startsWith('uniao_')) return;
-
     setCarregandoDetalhes(true);
-    const tipo = node.data.originalGroup || 'evento';
-    
     try {
-      const endpoint = tipo === 'pessoa' ? `http://localhost:8000/api/pessoas/${node.id}/` : `http://localhost:8000/api/eventos/${node.id}/`;
-      const res = await fetch(endpoint);
+      const res = await fetch(`http://localhost:8000/api/pessoas/${node.id}/`);
       const data = await res.json();
-      setDetalhes({ ...data, tipo_entidade: tipo });
+      setDetalhes({ ...data, tipo_entidade: 'pessoa' });
     } catch (error) {
       console.error("Erro ao buscar detalhes", error);
     }
@@ -238,19 +180,11 @@ function Arvore() {
           <div className="search-box">
             <input 
               type="text" 
-              placeholder="🔍 Filtrar por nome..." 
+              placeholder="🔍 Filtrar por nome ou apelido..." 
               value={buscaNome}
               onChange={(e) => setBuscaNome(e.target.value)}
             />
           </div>
-          <label className="toggle-label">
-            <input 
-              type="checkbox" 
-              checked={mostrarEventos} 
-              onChange={(e) => setMostrarEventos(e.target.checked)} 
-            />
-            Mostrar Eventos
-          </label>
         </div>
       </div>
 
@@ -259,7 +193,6 @@ function Arvore() {
           <ReactFlow
             nodes={nodes}
             edges={edges}
-            nodeTypes={nodeTypes} // Injetando os nós customizados
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onNodeClick={onNodeClick}
@@ -278,7 +211,7 @@ function Arvore() {
             
             {carregandoDetalhes ? (
               <p>Carregando...</p>
-            ) : detalhes.tipo_entidade === 'pessoa' ? (
+            ) : (
               <div className="detalhes-info">
                 <h3>👤 {detalhes.nome}</h3>
                 {detalhes.apelido && <p className="badge">"{detalhes.apelido}"</p>}
@@ -287,25 +220,9 @@ function Arvore() {
                 
                 <h4 className="mt-4">Eventos Presente:</h4>
                 <ul className="lista-eventos">
-                  {!detalhes.eventos || detalhes.eventos.length === 0 ? <li>Nenhum evento registrado.</li> : 
+                  {detalhes.eventos.length === 0 ? <li>Nenhum evento registrado.</li> : 
                     detalhes.eventos.map((ev, i) => (
                       <li key={i}><strong>{ev.data}</strong> - {ev.tipo}</li>
-                    ))
-                  }
-                </ul>
-              </div>
-            ) : (
-              <div className="detalhes-info evento">
-                <h3>📅 {detalhes.tipo}</h3>
-                <p><strong>Data:</strong> {detalhes.data}</p>
-                <p><strong>Local:</strong> {detalhes.local}</p>
-                {detalhes.descricao && <p className="descricao-box">{detalhes.descricao}</p>}
-                
-                <h4 className="mt-4">Participantes:</h4>
-                <ul className="lista-participantes">
-                  {!detalhes.participantes || detalhes.participantes.length === 0 ? <li>Nenhum participante.</li> : 
-                    detalhes.participantes.map((p, i) => (
-                      <li key={i}>{p.nome}</li>
                     ))
                   }
                 </ul>

@@ -102,7 +102,7 @@ def api_grafo(request):
             'id': p.uuid,
             'label': p.nomeCompleto,
             'group': 'pessoa',
-            'title': f"Apelido: {p.apelido or '-'}"
+            'apelido': p.apelido,
         })
 
         # Arestas (Relacionamentos)
@@ -327,11 +327,29 @@ def api_listar_eventos(request):
         eventos = Evento.nodes.order_by('data')
         data = []
         for e in eventos:
+            # Busca os participantes deste evento específico
+            query = """
+            MATCH (p:Pessoa)-[]->(e:Evento {uuid: $uuid})
+            RETURN p
+            """
+            results, meta = db.cypher_query(query, {'uuid': e.uuid})
+
+            participantes = []
+            for row in results:
+                node_pessoa = row[0]
+                participantes.append({
+                    'uuid': node_pessoa.get('uuid'),
+                    'nome': node_pessoa.get('nomeCompleto'),
+                    'apelido': node_pessoa.get('apelido', '')
+                })
+
             data.append({
                 'uuid': e.uuid,
                 'tipo': e.tipo,
                 'data': str(e.data) if e.data else "Data desc.",
-                'descricao': getattr(e, 'descricao', '')
+                'local': getattr(e, 'local', ''),
+                'descricao': getattr(e, 'descricao', ''),
+                'participantes': participantes
             })
         return JsonResponse(data, safe=False)
 
@@ -358,10 +376,8 @@ def api_listar_eventos(request):
                 descricao=dados.get('descricao')
             ).save()
 
-            # --- LOG DE CRIAÇÃO ---
             registrar_log(request.user, "Criou", "Evento",
                           f"Registrou o evento: {novo_evento.tipo}")
-
             return JsonResponse({'message': 'Evento criado!', 'uuid': novo_evento.uuid}, status=201)
 
         except Exception as e:
