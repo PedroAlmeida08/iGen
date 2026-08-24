@@ -31,4 +31,4 @@ __pycache__/
 Thumbs.db
 
 # Script para popular banco de dados
-populate.py
+backend/populate.py
