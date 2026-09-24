@@ -16,7 +16,7 @@ urlpatterns = [
     path('api/pessoas/<str:uuid>/', views.api_detalhe_pessoa,
          name='api_detalhe_pessoa'),
     path('api/pessoas/<str:uuid>/comentar/',
-         views.api_adicionar_comentario, name='api_adicionar_comentario'),
+         views.api_comentarios, name='api_comentarios'),
 
     # --- 4. EVENTOS ---
     path('api/eventos/', views.api_listar_eventos, name='api_listar_eventos'),

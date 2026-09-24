@@ -48,13 +48,13 @@ function Arvore() {
   
   const [detalhes, setDetalhes] = useState(null);
   const [carregandoDetalhes, setCarregandoDetalhes] = useState(false);
+  const [novoComentario, setNovoComentario] = useState('');
 
   const reactFlowWrapper = useRef(null);
 
   const onNodesChange = useCallback((changes) => setNodes((nds) => applyNodeChanges(changes, nds)), []);
   const onEdgesChange = useCallback((changes) => setEdges((eds) => applyEdgeChanges(changes, eds)), []);
 
-  // --- HELPER DE CABEÇALHOS ---
   const getHeaders = () => ({
     'Content-Type': 'application/json',
     'X-Familia-UUID': localStorage.getItem('familiaAtiva') || ''
@@ -178,6 +178,28 @@ function Arvore() {
     setCarregandoDetalhes(false);
   };
 
+  const handleEnviarComentario = async (e) => {
+    e.preventDefault();
+    if (!novoComentario.trim()) return;
+
+    try {
+      const res = await fetch(`http://localhost:8000/api/comentarios/${detalhes.uuid}/`, {
+        method: 'POST',
+        headers: getHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({ texto: novoComentario })
+      });
+
+      if (res.ok) {
+        setNovoComentario('');
+        // Recarrega os detalhes da pessoa silenciosamente para puxar o novo comentário
+        onNodeClick(null, { id: detalhes.uuid }); 
+      }
+    } catch (err) {
+      console.error("Erro ao enviar comentário:", err);
+    }
+  };
+
   return (
     <div className="arvore-page">
       <div className="arvore-toolbar">
@@ -189,6 +211,7 @@ function Arvore() {
               placeholder="🔍 Filtrar por nome ou apelido..." 
               value={buscaNome}
               onChange={(e) => setBuscaNome(e.target.value)}
+              style={{ backgroundColor: '#ffffff', color: '#333333' }}
             />
           </div>
         </div>
@@ -212,26 +235,67 @@ function Arvore() {
         </div>
 
         {detalhes && (
-          <div className="sidebar-detalhes">
-            <button className="btn-fechar" onClick={() => setDetalhes(null)}>✖</button>
+          <div className="sidebar-detalhes" style={{ display: 'flex', flexDirection: 'column', maxHeight: '100%' }}>
+            <button className="btn-fechar" onClick={() => setDetalhes(null)} style={{ alignSelf: 'flex-end', background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', padding: '5px' }}>✖</button>
             
             {carregandoDetalhes ? (
               <p>Carregando...</p>
             ) : (
-              <div className="detalhes-info">
-                <h3>👤 {detalhes.nome}</h3>
-                {detalhes.apelido && <p className="badge">"{detalhes.apelido}"</p>}
-                <p><strong>Nascimento:</strong> {detalhes.data_nascimento || 'Desconhecida'}</p>
-                <p><strong>Registrado por:</strong> {detalhes.criado_por_nome}</p>
+              <div className="detalhes-info" style={{ overflowY: 'auto', flex: 1, paddingRight: '5px' }}>
+
+                <h3 style={{ marginTop: '0' }}>👤 {detalhes.nome}</h3>
+                {detalhes.apelido && <p className="badge" style={{ display: 'inline-block', padding: '4px 8px', background: '#eef4ff', color: '#1877f2', borderRadius: '4px', fontSize: '0.85rem', marginBottom: '10px' }}>"{detalhes.apelido}"</p>}
                 
-                <h4 className="mt-4">Eventos Presente:</h4>
-                <ul className="lista-eventos">
+                <p style={{ margin: '5px 0' }}><strong>Nascimento:</strong> {detalhes.data_nascimento || 'Desconhecida'}</p>
+                {detalhes.data_obito && <p style={{ margin: '5px 0' }}><strong>Óbito:</strong> {detalhes.data_obito}</p>}
+                <p style={{ margin: '5px 0', fontSize: '0.85rem', color: '#666' }}><strong>Registrado por:</strong> {detalhes.criado_por_nome}</p>
+                
+                <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '15px 0' }} />
+                
+                <h4 style={{ marginBottom: '10px', color: '#333' }}>Eventos:</h4>
+                <ul className="lista-eventos" style={{ paddingLeft: '20px', fontSize: '0.9rem', color: '#555' }}>
                   {detalhes.eventos.length === 0 ? <li>Nenhum evento registrado.</li> : 
                     detalhes.eventos.map((ev, i) => (
-                      <li key={i}><strong>{ev.data}</strong> - {ev.tipo}</li>
+                      <li key={i} style={{ marginBottom: '5px' }}><strong>{ev.data}</strong> - {ev.tipo}</li>
                     ))
                   }
                 </ul>
+
+                <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '15px 0' }} />
+
+                {/* --- SEÇÃO DE COMENTÁRIOS --- */}
+                <h4 style={{ marginBottom: '10px', color: '#333' }}>Comentários ({detalhes.comentarios?.length || 0}):</h4>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '15px' }}>
+                  {detalhes.comentarios && detalhes.comentarios.length > 0 ? (
+                    detalhes.comentarios.map(c => (
+                      <div key={c.uuid} style={{ background: '#f8f9fa', padding: '10px', borderRadius: '8px', border: '1px solid #e9ecef' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', alignItems: 'baseline' }}>
+                          <strong style={{ color: '#1877f2', fontSize: '0.9rem' }}>{c.autor}</strong>
+                          <span style={{ color: '#888', fontSize: '0.75rem' }}>{new Date(c.data_hora).toLocaleString('pt-BR')}</span>
+                        </div>
+                        <p style={{ margin: 0, color: '#444', fontSize: '0.9rem', lineHeight: '1.4' }}>{c.texto}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p style={{ color: '#888', fontSize: '0.85rem', fontStyle: 'italic', margin: 0 }}>Seja o primeiro a comentar.</p>
+                  )}
+                </div>
+
+                <form onSubmit={handleEnviarComentario} style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: 'auto' }}>
+                  <textarea 
+                    value={novoComentario}
+                    onChange={e => setNovoComentario(e.target.value)}
+                    placeholder="Adicione um detalhe ou memória..."
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc', backgroundColor: '#ffffff', color: '#333333', fontSize: '0.9rem', resize: 'vertical' }}
+                    rows="2"
+                    required
+                  />
+                  <button type="submit" style={{ background: '#1877f2', color: '#fff', border: 'none', borderRadius: '6px', padding: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                    Enviar Comentário
+                  </button>
+                </form>
+
               </div>
             )}
           </div>

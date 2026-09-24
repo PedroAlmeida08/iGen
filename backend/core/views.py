@@ -322,14 +322,21 @@ def api_detalhe_pessoa(request, uuid):
                 'descricao': getattr(evento, 'descricao', '')
             })
 
+        query_comentarios = "MATCH (c:Comentario)-[:SOBRE]->(p:Pessoa {uuid: $uuid}) RETURN c ORDER BY c.data_hora DESC"
+        res_com, _ = db.cypher_query(query_comentarios, {'uuid': uuid})
+        comentarios = [{'uuid': row[0].get('uuid'), 'texto': row[0].get('texto'), 'autor': row[0].get(
+            'autor'), 'data_hora': row[0].get('data_hora')} for row in res_com]
+
         return JsonResponse({
             'uuid': pessoa.uuid,
             'nome': pessoa.nomeCompleto,
             'apelido': pessoa.apelido,
             'data_nascimento': str(pessoa.dataNascimento) if pessoa.dataNascimento else None,
+            'data_obito': getattr(pessoa, 'dataObito', None),
             'criado_por_nome': getattr(pessoa, 'criado_por_nome', 'Sistema'),
             'criado_por_id': getattr(pessoa, 'criado_por_id', None),
-            'eventos': eventos_participados
+            'eventos': eventos_participados,
+            'comentarios': comentarios
         })
 
     elif request.method == 'DELETE':
@@ -353,59 +360,192 @@ def api_detalhe_pessoa(request, uuid):
         pessoa.apelido = dados.get('apelido', pessoa.apelido)
         pessoa.save()
 
+        if 'pai_uuid' in dados:
+            db.cypher_query(
+                "MATCH (pai:Pessoa)-[r:PAI_DE]->(filho:Pessoa {uuid: $uuid}) DELETE r", {'uuid': uuid})
+            if dados['pai_uuid']:
+                db.cypher_query("MATCH (pai:Pessoa {uuid: $pai_uuid}), (filho:Pessoa {uuid: $uuid}) MERGE (pai)-[:PAI_DE]->(filho)", {
+                                'pai_uuid': dados['pai_uuid'], 'uuid': uuid})
+
+        if 'mae_uuid' in dados:
+            db.cypher_query(
+                "MATCH (mae:Pessoa)-[r:MAE_DE]->(filho:Pessoa {uuid: $uuid}) DELETE r", {'uuid': uuid})
+            if dados['mae_uuid']:
+                db.cypher_query("MATCH (mae:Pessoa {uuid: $mae_uuid}), (filho:Pessoa {uuid: $uuid}) MERGE (mae)-[:MAE_DE]->(filho)", {
+                                'mae_uuid': dados['mae_uuid'], 'uuid': uuid})
+
+        if 'conjuge_uuid' in dados:
+            db.cypher_query(
+                "MATCH (p:Pessoa {uuid: $uuid})-[r:CASADO_COM]-(c:Pessoa) DELETE r", {'uuid': uuid})
+            if dados['conjuge_uuid']:
+                db.cypher_query("MATCH (p1:Pessoa {uuid: $uuid}), (p2:Pessoa {uuid: $conjuge_uuid}) MERGE (p1)-[:CASADO_COM]-(p2)", {
+                                'uuid': uuid, 'conjuge_uuid': dados['conjuge_uuid']})
+
         registrar_log(request.user, familia_ws, "Editou",
                       "Pessoa", f"Alterou dados de: {nome_antigo}")
         return JsonResponse({'message': 'Dados atualizados com sucesso!'})
+    familia_ws, familia_node, membro, erro = obter_contexto_familia(request)
+    if erro:
+        return erro
 
+    try:
+        pessoa = Pessoa.nodes.get(uuid=uuid)
+        if not pessoa.pertence_a.is_connected(familia_node):
+            return HttpResponseForbidden("Esta pessoa não pertence à sua família.")
+    except Pessoa.DoesNotExist:
+        return HttpResponseNotFound("Pessoa não encontrada.")
+
+    if request.method == 'GET':
+        eventos_participados = []
+        for evento in pessoa.participou.all():
+            eventos_participados.append({
+                'tipo': evento.tipo,
+                'data': str(evento.data) if evento.data else 'Data desc.',
+                'descricao': getattr(evento, 'descricao', '')
+            })
+
+        # Resgata comentários da pessoa
+        query_comentarios = "MATCH (c:Comentario)-[:SOBRE]->(p:Pessoa {uuid: $uuid}) RETURN c ORDER BY c.data_hora DESC"
+        res_com, _ = db.cypher_query(query_comentarios, {'uuid': uuid})
+        comentarios = [{'uuid': row[0].get('uuid'), 'texto': row[0].get('texto'), 'autor': row[0].get(
+            'autor'), 'data_hora': row[0].get('data_hora')} for row in res_com]
+
+        return JsonResponse({
+            'uuid': pessoa.uuid,
+            'nome': pessoa.nomeCompleto,
+            'apelido': pessoa.apelido,
+            'data_nascimento': str(pessoa.dataNascimento) if pessoa.dataNascimento else None,
+            'data_obito': getattr(pessoa, 'dataObito', None),
+            'foto_url': getattr(pessoa, 'foto_url', None),
+            'criado_por_nome': getattr(pessoa, 'criado_por_nome', 'Sistema'),
+            'criado_por_id': getattr(pessoa, 'criado_por_id', None),
+            'eventos': eventos_participados,
+            'comentarios': comentarios
+        })
+
+    elif request.method == 'DELETE':
+        if membro.funcao != 'ADMIN':
+            return HttpResponseForbidden("Apenas administradores da família podem excluir registros.")
+
+        nome_pessoa = pessoa.nomeCompleto
+        pessoa.delete()
+        registrar_log(request.user, familia_ws, "Excluiu",
+                      "Pessoa", f"Apagou permanentemente: {nome_pessoa}")
+        return JsonResponse({'message': 'Registro excluído com sucesso.'})
+
+    # Usamos PUT ou POST para aceitar FormData com envio de fotos
+    elif request.method in ['PUT', 'POST']:
+        if membro.funcao != 'ADMIN':
+            return HttpResponseForbidden("Apenas administradores da família podem editar registros.")
+
+        # Identifica se é JSON ou envio de formulário com foto
+        if request.content_type.startswith('multipart/form-data'):
+            dados = request.POST
+            foto = request.FILES.get('foto')
+        else:
+            dados = json.loads(request.body)
+            foto = None
+
+        nome_antigo = pessoa.nomeCompleto
+
+        # Atualiza campos escalares
+        pessoa.nomeCompleto = dados.get('nomeCompleto', pessoa.nomeCompleto)
+        pessoa.apelido = dados.get('apelido', pessoa.apelido)
+
+        # Salvamento de Foto
+        if foto:
+            fs = FileSystemStorage()
+            filename = fs.save(foto.name, foto)
+            pessoa.foto_url = request.build_absolute_uri(fs.url(filename))
+
+        pessoa.save()
+
+        # Atualização de Relacionamentos via Cypher
+        if 'pai_uuid' in dados:
+            db.cypher_query(
+                "MATCH (pai:Pessoa)-[r:PAI_DE]->(filho:Pessoa {uuid: $uuid}) DELETE r", {'uuid': uuid})
+            if dados['pai_uuid']:
+                db.cypher_query("MATCH (pai:Pessoa {uuid: $pai_uuid}), (filho:Pessoa {uuid: $uuid}) MERGE (pai)-[:PAI_DE]->(filho)", {
+                                'pai_uuid': dados['pai_uuid'], 'uuid': uuid})
+
+        if 'mae_uuid' in dados:
+            db.cypher_query(
+                "MATCH (mae:Pessoa)-[r:MAE_DE]->(filho:Pessoa {uuid: $uuid}) DELETE r", {'uuid': uuid})
+            if dados['mae_uuid']:
+                db.cypher_query("MATCH (mae:Pessoa {uuid: $mae_uuid}), (filho:Pessoa {uuid: $uuid}) MERGE (mae)-[:MAE_DE]->(filho)", {
+                                'mae_uuid': dados['mae_uuid'], 'uuid': uuid})
+
+        if 'conjuge_uuid' in dados:
+            db.cypher_query(
+                "MATCH (p:Pessoa {uuid: $uuid})-[r:CASADO_COM]-(c:Pessoa) DELETE r", {'uuid': uuid})
+            if dados['conjuge_uuid']:
+                db.cypher_query("MATCH (p1:Pessoa {uuid: $uuid}), (p2:Pessoa {uuid: $conjuge_uuid}) MERGE (p1)-[:CASADO_COM]-(p2)", {
+                                'uuid': uuid, 'conjuge_uuid': dados['conjuge_uuid']})
+
+        registrar_log(request.user, familia_ws, "Editou",
+                      "Pessoa", f"Alterou dados de: {nome_antigo}")
+        return JsonResponse({'message': 'Dados e foto atualizados com sucesso!'})
 
 # ==========================================
 # 4. API DE COMENTÁRIOS
 # ==========================================
 
+
 @csrf_exempt
-def api_adicionar_comentario(request, uuid):
+def api_comentarios(request, uuid_alvo):
     familia_ws, familia_node, membro, erro = obter_contexto_familia(request)
     if erro:
         return erro
 
     if request.method == 'POST':
-        if membro.funcao == 'LEITOR':
-            return HttpResponseForbidden("Leitores não podem efetuar comentários.")
-
         try:
             dados = json.loads(request.body)
             texto = dados.get('texto')
 
-            # O cypher_query garante que o comentário é criado e ligado tanto à Pessoa quanto à Família
+            if not texto:
+                return HttpResponseBadRequest("O texto do comentário não pode estar vazio.")
+
+            # Gera um UUID para o comentário
+            comentario_uuid = str(uuid_lib.uuid4())
+            data_hora_atual = datetime.now().isoformat()
+            autor = request.user.username
+
+            # Query Cypher para criar o Comentário e ligar ao alvo (Pessoa ou Evento) e à Família
             query = """
-            MATCH (p:Pessoa {uuid: $uuid_pessoa})-[:PERTENCE_A]->(f:FamiliaNode {uuid: $uuid_familia})
+            MATCH (alvo {uuid: $uuid_alvo})-[:PERTENCE_A]->(f:FamiliaNode {uuid: $familia_uuid})
             CREATE (c:Comentario {
-                texto: $texto,
-                autor: $autor,
-                data: $data,
-                uuid: $uuid_comentario
+                uuid: $comentario_uuid, 
+                texto: $texto, 
+                autor: $autor, 
+                data_hora: $data_hora
             })
-            CREATE (c)-[:SOBRE]->(p)
+            CREATE (c)-[:SOBRE]->(alvo)
             CREATE (c)-[:PERTENCE_A]->(f)
+            RETURN c.uuid
             """
-
-            db.cypher_query(query, {
-                'uuid_pessoa': uuid,
-                'uuid_familia': familia_node.uuid,
-                'uuid_comentario': str(uuid_lib.uuid4()),
+            parametros = {
+                'uuid_alvo': uuid_alvo,
+                'familia_uuid': familia_node.uuid,
+                'comentario_uuid': comentario_uuid,
                 'texto': texto,
-                'autor': request.user.username,
-                'data': datetime.now().strftime("%d/%m/%Y %H:%M")
-            })
+                'autor': autor,
+                'data_hora': data_hora_atual
+            }
 
-            return JsonResponse({'message': 'Comentário adicionado!'})
+            resultados, _ = db.cypher_query(query, parametros)
+
+            if not resultados:
+                return HttpResponseBadRequest("Alvo não encontrado ou não pertence a esta família.")
+
+            return JsonResponse({'message': 'Comentário adicionado com sucesso!'}, status=201)
+
         except Exception as e:
-            return HttpResponseBadRequest(str(e))
-
+            return HttpResponseBadRequest(f"Erro ao salvar comentário: {str(e)}")
 
 # ==========================================
 # 5. API DE EVENTOS
 # ==========================================
+
 
 @csrf_exempt
 def api_listar_eventos(request):
@@ -496,9 +636,13 @@ def api_detalhe_evento(request, uuid):
     if request.method == 'GET':
         query = "MATCH (p:Pessoa)-[]->(e:Evento {uuid: $uuid}) RETURN p"
         results, _ = db.cypher_query(query, {'uuid': uuid})
-
         participantes = [{'uuid': row[0].get('uuid'), 'nome': row[0].get(
             'nomeCompleto')} for row in results]
+
+        query_comentarios = "MATCH (c:Comentario)-[:SOBRE]->(e:Evento {uuid: $uuid}) RETURN c ORDER BY c.data_hora DESC"
+        res_com, _ = db.cypher_query(query_comentarios, {'uuid': uuid})
+        comentarios = [{'uuid': row[0].get('uuid'), 'texto': row[0].get('texto'), 'autor': row[0].get(
+            'autor'), 'data_hora': row[0].get('data_hora')} for row in res_com]
 
         return JsonResponse({
             'uuid': evento.uuid,
@@ -506,7 +650,8 @@ def api_detalhe_evento(request, uuid):
             'data': str(evento.data) if evento.data else "Data desc.",
             'local': getattr(evento, 'local', 'Local não informado'),
             'descricao': getattr(evento, 'descricao', ''),
-            'participantes': participantes
+            'participantes': participantes,
+            'comentarios': comentarios
         })
 
     elif request.method == 'DELETE':
@@ -524,21 +669,116 @@ def api_detalhe_evento(request, uuid):
             return HttpResponseForbidden("Apenas administradores da família podem editar eventos.")
 
         dados = json.loads(request.body)
-        tipo_antigo = evento.tipo
 
+        tipo_antigo = evento.tipo
         evento.tipo = dados.get('tipo', evento.tipo)
         evento.local = dados.get('local', evento.local)
         evento.descricao = dados.get('descricao', evento.descricao)
         evento.save()
 
+        participantes_json = dados.get('participantes')
+        if participantes_json is not None:
+            lista_uuids = json.loads(participantes_json) if isinstance(
+                participantes_json, str) else participantes_json
+            db.cypher_query(
+                "MATCH (p:Pessoa)-[r:PARTICIPOU]->(e:Evento {uuid: $uuid}) DELETE r", {'uuid': uuid})
+            for p_uuid in lista_uuids:
+                db.cypher_query("MATCH (p:Pessoa {uuid: $p_uuid}), (e:Evento {uuid: $e_uuid}) MERGE (p)-[:PARTICIPOU]->(e)", {
+                                'p_uuid': p_uuid, 'e_uuid': uuid})
+
         registrar_log(request.user, familia_ws, "Editou", "Evento",
                       f"Alterou dados do evento: {tipo_antigo}")
         return JsonResponse({'message': 'Evento atualizado com sucesso!'})
+    familia_ws, familia_node, membro, erro = obter_contexto_familia(request)
+    if erro:
+        return erro
 
+    try:
+        evento = Evento.nodes.get(uuid=uuid)
+        if not evento.pertence_a.is_connected(familia_node):
+            return HttpResponseForbidden("Este evento não pertence à sua família.")
+    except Evento.DoesNotExist:
+        return HttpResponseNotFound("Evento não encontrado.")
+
+    if request.method == 'GET':
+        query = "MATCH (p:Pessoa)-[]->(e:Evento {uuid: $uuid}) RETURN p"
+        results, _ = db.cypher_query(query, {'uuid': uuid})
+        participantes = [{'uuid': row[0].get('uuid'), 'nome': row[0].get(
+            'nomeCompleto')} for row in results]
+
+        # Resgata comentários do evento
+        query_comentarios = "MATCH (c:Comentario)-[:SOBRE]->(e:Evento {uuid: $uuid}) RETURN c ORDER BY c.data_hora DESC"
+        res_com, _ = db.cypher_query(query_comentarios, {'uuid': uuid})
+        comentarios = [{'uuid': row[0].get('uuid'), 'texto': row[0].get('texto'), 'autor': row[0].get(
+            'autor'), 'data_hora': row[0].get('data_hora')} for row in res_com]
+
+        return JsonResponse({
+            'uuid': evento.uuid,
+            'tipo': evento.tipo,
+            'data': str(evento.data) if evento.data else "Data desc.",
+            'local': getattr(evento, 'local', 'Local não informado'),
+            'descricao': getattr(evento, 'descricao', ''),
+            'foto_url': getattr(evento, 'foto_url', None),
+            'participantes': participantes,
+            'comentarios': comentarios
+        })
+
+    elif request.method == 'DELETE':
+        if membro.funcao != 'ADMIN':
+            return HttpResponseForbidden("Apenas administradores da família podem excluir eventos.")
+
+        tipo_evento = evento.tipo
+        evento.delete()
+        registrar_log(request.user, familia_ws, "Excluiu", "Evento",
+                      f"Apagou permanentemente o evento: {tipo_evento}")
+        return JsonResponse({'message': 'Evento excluído com sucesso.'})
+
+    elif request.method in ['PUT', 'POST']:
+        if membro.funcao != 'ADMIN':
+            return HttpResponseForbidden("Apenas administradores da família podem editar eventos.")
+
+        if request.content_type.startswith('multipart/form-data'):
+            dados = request.POST
+            foto = request.FILES.get('foto')
+        else:
+            dados = json.loads(request.body)
+            foto = None
+
+        tipo_antigo = evento.tipo
+        evento.tipo = dados.get('tipo', evento.tipo)
+        evento.local = dados.get('local', evento.local)
+        evento.descricao = dados.get('descricao', evento.descricao)
+
+        if foto:
+            fs = FileSystemStorage()
+            filename = fs.save(foto.name, foto)
+            evento.foto_url = request.build_absolute_uri(fs.url(filename))
+
+        evento.save()
+
+        # Atualização dos Participantes
+        participantes_json = dados.get('participantes')
+        if participantes_json is not None:
+            lista_uuids = json.loads(participantes_json) if isinstance(
+                participantes_json, str) else participantes_json
+
+            # Remove as arestas de todos os participantes antigos
+            db.cypher_query(
+                "MATCH (p:Pessoa)-[r:PARTICIPOU]->(e:Evento {uuid: $uuid}) DELETE r", {'uuid': uuid})
+
+            # Cria as arestas para os novos selecionados
+            for p_uuid in lista_uuids:
+                db.cypher_query("MATCH (p:Pessoa {uuid: $p_uuid}), (e:Evento {uuid: $e_uuid}) MERGE (p)-[:PARTICIPOU]->(e)", {
+                                'p_uuid': p_uuid, 'e_uuid': uuid})
+
+        registrar_log(request.user, familia_ws, "Editou", "Evento",
+                      f"Alterou dados do evento: {tipo_antigo}")
+        return JsonResponse({'message': 'Evento e foto atualizados com sucesso!'})
 
 # ==========================================
 # 6. API DE RELACIONAMENTOS
 # ==========================================
+
 
 @csrf_exempt
 def api_criar_relacionamento(request):
@@ -711,16 +951,56 @@ def api_processar_solicitacao(request, id):
 
                 elif solicitacao.tipo_acao == 'Editar':
                     novos_dados = json.loads(solicitacao.dados_novos)
+                    uuid = node.uuid
+
                     if solicitacao.entidade == 'Pessoa':
+                        # 1. Atualiza Dados Textuais
                         node.nomeCompleto = novos_dados.get(
                             'nomeCompleto', node.nomeCompleto)
                         node.apelido = novos_dados.get('apelido', node.apelido)
+                        node.save()
+
+                        # 2. Atualiza Laços Familiares no Grafo
+                        if 'pai_uuid' in novos_dados:
+                            db.cypher_query(
+                                "MATCH (pai:Pessoa)-[r:PAI_DE]->(filho:Pessoa {uuid: $uuid}) DELETE r", {'uuid': uuid})
+                            if novos_dados['pai_uuid']:
+                                db.cypher_query("MATCH (pai:Pessoa {uuid: $pai_uuid}), (filho:Pessoa {uuid: $uuid}) MERGE (pai)-[:PAI_DE]->(filho)", {
+                                                'pai_uuid': novos_dados['pai_uuid'], 'uuid': uuid})
+
+                        if 'mae_uuid' in novos_dados:
+                            db.cypher_query(
+                                "MATCH (mae:Pessoa)-[r:MAE_DE]->(filho:Pessoa {uuid: $uuid}) DELETE r", {'uuid': uuid})
+                            if novos_dados['mae_uuid']:
+                                db.cypher_query("MATCH (mae:Pessoa {uuid: $mae_uuid}), (filho:Pessoa {uuid: $uuid}) MERGE (mae)-[:MAE_DE]->(filho)", {
+                                                'mae_uuid': novos_dados['mae_uuid'], 'uuid': uuid})
+
+                        if 'conjuge_uuid' in novos_dados:
+                            db.cypher_query(
+                                "MATCH (p:Pessoa {uuid: $uuid})-[r:CASADO_COM]-(c:Pessoa) DELETE r", {'uuid': uuid})
+                            if novos_dados['conjuge_uuid']:
+                                db.cypher_query("MATCH (p1:Pessoa {uuid: $uuid}), (p2:Pessoa {uuid: $conjuge_uuid}) MERGE (p1)-[:CASADO_COM]-(p2)", {
+                                                'uuid': uuid, 'conjuge_uuid': novos_dados['conjuge_uuid']})
+
                     else:
+                        # 1. Atualiza Dados Textuais do Evento
                         node.tipo = novos_dados.get('tipo', node.tipo)
                         node.local = novos_dados.get('local', node.local)
                         node.descricao = novos_dados.get(
                             'descricao', node.descricao)
-                    node.save()
+                        node.save()
+
+                        # 2. Atualiza Participantes no Grafo
+                        participantes_json = novos_dados.get('participantes')
+                        if participantes_json is not None:
+                            lista_uuids = json.loads(participantes_json) if isinstance(
+                                participantes_json, str) else participantes_json
+                            db.cypher_query(
+                                "MATCH (p:Pessoa)-[r:PARTICIPOU]->(e:Evento {uuid: $uuid}) DELETE r", {'uuid': uuid})
+                            for p_uuid in lista_uuids:
+                                db.cypher_query("MATCH (p:Pessoa {uuid: $p_uuid}), (e:Evento {uuid: $e_uuid}) MERGE (p)-[:PARTICIPOU]->(e)", {
+                                                'p_uuid': p_uuid, 'e_uuid': uuid})
+
                     registrar_log(request.user, familia_ws, "Editou",
                                   solicitacao.entidade, "Editou registro após aprovação")
 
@@ -730,7 +1010,6 @@ def api_processar_solicitacao(request, id):
 
         except Exception as e:
             return HttpResponseBadRequest(f"Erro ao processar a solicitação: {str(e)}")
-
 # ==========================================
 # 9. API DE GESTÃO DE FAMÍLIAS (Workspaces)
 # ==========================================

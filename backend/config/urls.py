@@ -17,6 +17,8 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from core import views  # NOVO: Importação necessária para as rotas da API
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -26,4 +28,6 @@ urlpatterns = [
     path('api/familias/criar/', views.api_criar_familia, name='api_criar_familia'),
     path('api/familias/resgatar/', views.api_resgatar_dados_antigos,
          name='api_resgatar_dados_antigos'),
+    path('api/comentarios/<str:uuid_alvo>/',
+         views.api_comentarios, name='api_comentarios'),
 ]

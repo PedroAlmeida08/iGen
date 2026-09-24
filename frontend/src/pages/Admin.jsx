@@ -13,9 +13,8 @@ function Admin({ user }) {
   const [editandoPessoa, setEditandoPessoa] = useState(null);
   const [editandoEvento, setEditandoEvento] = useState(null);
 
-  // --- STATE DOS FORMULÁRIOS (Create) ---
   const [formPessoa, setFormPessoa] = useState({ 
-    nomeCompleto: '', apelido: '', dataNascimento: '', dataObito: '', // NOVO CAMPO AQUI
+    nomeCompleto: '', apelido: '', dataNascimento: '', dataObito: '', 
     pai_uuid: '', mae_uuid: '', conjuge_uuid: '', dataCasamento: ''
   });
   const [formEvento, setFormEvento] = useState({ tipo: '', data: '', local: '', descricao: '' });
@@ -27,42 +26,49 @@ function Admin({ user }) {
   });
 
   const familiaAtiva = localStorage.getItem('familiaAtiva');
-  const temFamilia = familiaAtiva && familiaAtiva !== 'undefined' && familiaAtiva !== 'null';
+  const temFamilia = Boolean(familiaAtiva && familiaAtiva !== 'undefined' && familiaAtiva !== 'null');
+
+  const [refreshKey, setRefreshKey] = useState(0);
+  const atualizarTabelas = () => setRefreshKey(prev => prev + 1);
 
   const getHeaders = () => ({
     'Content-Type': 'application/json',
     'X-Familia-UUID': temFamilia ? familiaAtiva : ''
   });
 
-  const carregarDados = () => {
+  const getHeadersForm = () => ({
+    'X-Familia-UUID': temFamilia ? familiaAtiva : ''
+  });
+
+  // Tudo é carregado de forma limpa dentro do useEffect, reagindo ao "refreshKey"
+  useEffect(() => {
     if (!temFamilia) return;
-    fetch('http://localhost:8000/api/pessoas/', { headers: getHeaders(), credentials: 'include' })
+
+    const headersJSON = { 'Content-Type': 'application/json', 'X-Familia-UUID': familiaAtiva };
+
+    fetch('http://localhost:8000/api/pessoas/', { headers: headersJSON, credentials: 'include' })
       .then(res => res.ok ? res.json() : [])
       .then(data => setListaPessoas(Array.isArray(data) ? data : []))
-      .catch(err => console.error(err));
+      .catch(err => console.error("Erro Pessoas:", err));
 
-    fetch('http://localhost:8000/api/eventos/', { headers: getHeaders(), credentials: 'include' })
+    fetch('http://localhost:8000/api/eventos/', { headers: headersJSON, credentials: 'include' })
       .then(res => res.ok ? res.json() : [])
       .then(data => setListaEventos(Array.isArray(data) ? data : []))
-      .catch(err => console.error(err));
-  };
+      .catch(err => console.error("Erro Eventos:", err));
 
-  const carregarDadosAdmin = async () => {
-    if (user && user.is_admin && temFamilia) {
-      try {
-        const resLogs = await fetch('http://localhost:8000/api/logs/', { headers: getHeaders(), credentials: 'include' });
-        if (resLogs.ok) setListaLogs(await resLogs.json());
+    if (user && user.is_admin) {
+      fetch('http://localhost:8000/api/logs/', { headers: headersJSON, credentials: 'include' })
+        .then(res => res.ok ? res.json() : [])
+        .then(data => setListaLogs(Array.isArray(data) ? data : []))
+        .catch(err => console.error("Erro Admin Logs:", err));
 
-        const resSol = await fetch('http://localhost:8000/api/solicitacoes/', { headers: getHeaders(), credentials: 'include' });
-        if (resSol.ok) setListaSolicitacoes(await resSol.json());
-      } catch (error) { console.error(error); }
+      fetch('http://localhost:8000/api/solicitacoes/', { headers: headersJSON, credentials: 'include' })
+        .then(res => res.ok ? res.json() : [])
+        .then(data => setListaSolicitacoes(Array.isArray(data) ? data : []))
+        .catch(err => console.error("Erro Admin Solicitações:", err));
     }
-  };
+  }, [refreshKey, temFamilia, familiaAtiva, user]);
 
-  useEffect(() => {
-    carregarDados();
-    carregarDadosAdmin();
-  }, [user, familiaAtiva]);
 
   const salvarPessoa = async (e) => {
     e.preventDefault();
@@ -73,11 +79,15 @@ function Admin({ user }) {
       });
       if(res.ok) {
         setMsg("✅ Pessoa e eventos registrados!");
-        // Limpa o novo campo ao salvar
         setFormPessoa({ nomeCompleto: '', apelido: '', dataNascimento: '', dataObito: '', pai_uuid: '', mae_uuid: '', conjuge_uuid: '', dataCasamento: '' });
-        carregarDados(); carregarDadosAdmin();
-      } else { setMsg("❌ Erro ao salvar"); }
-    } catch(err) { setMsg("Erro de conexão."); }
+        atualizarTabelas();
+      } else { 
+        setMsg("❌ Erro ao salvar"); 
+      }
+    } catch(err) { 
+      console.error(err); 
+      setMsg("Erro de conexão."); 
+    }
   };
 
   const salvarEvento = async (e) => {
@@ -90,9 +100,14 @@ function Admin({ user }) {
       if(res.ok) {
         setMsg("✅ Evento criado!");
         setFormEvento({ tipo: '', data: '', local: '', descricao: '' });
-        carregarDados(); carregarDadosAdmin();
-      } else { setMsg("❌ Erro ao criar evento."); }
-    } catch(err) { setMsg("Erro de conexão."); }
+        atualizarTabelas();
+      } else { 
+        setMsg("❌ Erro ao criar evento."); 
+      }
+    } catch(err) { 
+      console.error(err); 
+      setMsg("Erro de conexão."); 
+    }
   };
 
   const salvarRelacionamento = async (e) => {
@@ -103,9 +118,15 @@ function Admin({ user }) {
         body: JSON.stringify(formRelacao)
       });
       if(res.ok) {
-        setMsg("🔗 Relacionamento criado!"); carregarDadosAdmin();
-      } else { setMsg("❌ Erro ao conectar"); }
-    } catch(err) { setMsg("Erro de conexão."); }
+        setMsg("🔗 Relacionamento criado!"); 
+        atualizarTabelas();
+      } else { 
+        setMsg("❌ Erro ao conectar"); 
+      }
+    } catch(err) { 
+      console.error(err); 
+      setMsg("Erro de conexão."); 
+    }
   };
 
   const dispararAcaoExclusao = async (entidade, uuid) => {
@@ -116,9 +137,12 @@ function Admin({ user }) {
         const res = await fetch(url, { method: 'DELETE', headers: getHeaders(), credentials: 'include' });
         if (res.ok) {
           setMsg(`🗑️ ${entidade} excluído(a) com sucesso.`);
-          carregarDados(); carregarDadosAdmin();
+          atualizarTabelas();
         }
-      } catch(err) { setMsg("Erro de conexão."); }
+      } catch(err) { 
+        console.error(err); 
+        setMsg("Erro de conexão."); 
+      }
     } else {
       setSolicitacaoAtual({ tipo_acao: 'Excluir', entidade, uuid_entidade: uuid, motivo: '', dados_novos: null });
       setModalOpen(true);
@@ -132,19 +156,47 @@ function Admin({ user }) {
     if (user && user.is_admin) {
       try {
         const url = entidade === 'Pessoa' ? `http://localhost:8000/api/pessoas/${dados.uuid}/` : `http://localhost:8000/api/eventos/${dados.uuid}/`;
+        
         const res = await fetch(url, {
-          method: 'PUT', headers: getHeaders(), credentials: 'include', body: JSON.stringify(dados)
+          method: 'PUT', 
+          headers: getHeaders(), // Volta a usar o cabeçalho padrão com application/json
+          credentials: 'include', 
+          body: JSON.stringify(dados)
         });
+        
         if (res.ok) {
           setMsg(`✅ ${entidade} atualizado(a) com sucesso!`);
           entidade === 'Pessoa' ? setEditandoPessoa(null) : setEditandoEvento(null);
-          carregarDados(); carregarDadosAdmin();
+          atualizarTabelas();
+        } else {
+          setMsg("❌ Erro ao atualizar os dados.");
         }
-      } catch(err) { setMsg("Erro de conexão."); }
+      } catch(err) { 
+        console.error(err); 
+        setMsg("Erro de conexão."); 
+      }
     } else {
-      setSolicitacaoAtual({ tipo_acao: 'Editar', entidade, uuid_entidade: dados.uuid, motivo: '', dados_novos: dados });
+      // Como não há mais fotos, enviamos o objeto "dados" inteiro direto na solicitação
+      setSolicitacaoAtual({ 
+        tipo_acao: 'Editar', 
+        entidade, 
+        uuid_entidade: dados.uuid, 
+        motivo: '', 
+        dados_novos: JSON.stringify(dados) 
+      });
       setModalOpen(true);
     }
+  };
+
+  const toggleParticipanteEdicao = (uuid) => {
+    setEditandoEvento(prev => {
+      const participantes = prev.participantes || [];
+      if (participantes.includes(uuid)) {
+        return { ...prev, participantes: participantes.filter(id => id !== uuid) };
+      } else {
+        return { ...prev, participantes: [...participantes, uuid] };
+      }
+    });
   };
 
   const confirmarSolicitacao = async (e) => {
@@ -155,11 +207,14 @@ function Admin({ user }) {
         body: JSON.stringify(solicitacaoAtual)
       });
       if (res.ok) {
-        setMsg("📩 Sua solicitação foi enviada para os administradores!");
+        setMsg("📩 A sua solicitação foi enviada para os administradores!");
         setModalOpen(false);
         setEditandoPessoa(null); setEditandoEvento(null);
       }
-    } catch(err) { setMsg("Erro de conexão ao solicitar."); }
+    } catch(err) { 
+      console.error(err); 
+      setMsg("Erro de conexão ao solicitar."); 
+    }
   };
 
   const julgarSolicitacao = async (id, acao) => {
@@ -170,9 +225,12 @@ function Admin({ user }) {
       });
       if (res.ok) {
         setMsg(acao === 'APROVAR' ? "✅ Solicitação Aprovada e Aplicada." : "❌ Solicitação Negada.");
-        carregarDados(); carregarDadosAdmin();
+        atualizarTabelas();
       }
-    } catch(err) { setMsg("Erro de conexão."); }
+    } catch(err) { 
+      console.error(err); 
+      setMsg("Erro de conexão."); 
+    }
   };
 
   if (!temFamilia) {
@@ -191,7 +249,11 @@ function Admin({ user }) {
             <p style={{color: '#666', fontSize: '0.9rem', marginBottom: '20px'}}>Como você não é administrador, esta ação requer aprovação.</p>
             <form onSubmit={confirmarSolicitacao}>
               <textarea 
-                required rows="4" style={{width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc', marginBottom: '15px'}}
+                required rows="4" 
+                style={{
+                  width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc', marginBottom: '15px',
+                  backgroundColor: '#ffffff', color: '#333333'
+                }}
                 placeholder="Ex: Descobri que o ano de nascimento correto é 1950."
                 value={solicitacaoAtual.motivo} onChange={e => setSolicitacaoAtual({...solicitacaoAtual, motivo: e.target.value})}
               />
@@ -212,10 +274,10 @@ function Admin({ user }) {
         
         {user && user.is_admin && (
           <>
-            <button className={`tab-btn ${activeTab === 'aprovacoes' ? 'active' : ''}`} onClick={() => {setActiveTab('aprovacoes'); setMsg(''); carregarDadosAdmin();}} style={{marginLeft: 'auto', backgroundColor: activeTab === 'aprovacoes' ? '#fff3e0' : 'transparent', color: activeTab === 'aprovacoes' ? '#e65100' : 'inherit'}}>
+            <button className={`tab-btn ${activeTab === 'aprovacoes' ? 'active' : ''}`} onClick={() => {setActiveTab('aprovacoes'); setMsg(''); atualizarTabelas();}} style={{marginLeft: 'auto', backgroundColor: activeTab === 'aprovacoes' ? '#fff3e0' : 'transparent', color: activeTab === 'aprovacoes' ? '#e65100' : 'inherit'}}>
               🔔 Aprovações {listaSolicitacoes.length > 0 && `(${listaSolicitacoes.length})`}
             </button>
-            <button className={`tab-btn ${activeTab === 'logs' ? 'active' : ''}`} onClick={() => {setActiveTab('logs'); setMsg(''); carregarDadosAdmin();}}>
+            <button className={`tab-btn ${activeTab === 'logs' ? 'active' : ''}`} onClick={() => {setActiveTab('logs'); setMsg(''); atualizarTabelas();}}>
               📜 Auditoria
             </button>
           </>
@@ -238,7 +300,6 @@ function Admin({ user }) {
                    <input required type="date" value={formPessoa.dataNascimento} onChange={e => setFormPessoa({...formPessoa, dataNascimento: e.target.value})} />
                  </div>
                  <div style={{flex:1}}>
-                   {/* NOVO CAMPO: Óbito opcional */}
                    <label>Óbito (Opcional)</label>
                    <input type="date" value={formPessoa.dataObito} onChange={e => setFormPessoa({...formPessoa, dataObito: e.target.value})} />
                  </div>
@@ -283,7 +344,7 @@ function Admin({ user }) {
         {activeTab === 'gerenciar' && (
           <div>
             <h2 className="form-title">Gerenciar Registros</h2>
-            <p style={{color: '#666', marginBottom: '20px'}}>{user && user.is_admin ? "Como admin, suas edições são imediatas." : "Você pode solicitar edições que serão revisadas pelos administradores."}</p>
+            <p style={{color: '#666', marginBottom: '20px'}}>{user && user.is_admin ? "Como admin, as suas edições são imediatas." : "Você pode solicitar edições que serão revisadas pelos administradores."}</p>
 
             <h3 style={{marginBottom: '10px', color: '#333'}}>Pessoas</h3>
             <div style={{overflowX: 'auto', background: '#fff', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', marginBottom: '30px'}}>
@@ -300,11 +361,32 @@ function Admin({ user }) {
                     <tr key={p.uuid} style={{borderBottom: '1px solid #e9ecef'}}>
                       {editandoPessoa && editandoPessoa.uuid === p.uuid ? (
                         <td colSpan="3" style={{padding: '12px', background: '#f5f5f5'}}>
-                          <form onSubmit={(e) => dispararAcaoEdicao(e, 'Pessoa')} style={{display: 'flex', gap: '10px'}}>
-                            <input type="text" value={editandoPessoa.nomeCompleto} onChange={e => setEditandoPessoa({...editandoPessoa, nomeCompleto: e.target.value})} style={{padding: '6px', flex: 2}} required/>
-                            <input type="text" value={editandoPessoa.apelido || ''} onChange={e => setEditandoPessoa({...editandoPessoa, apelido: e.target.value})} placeholder="Apelido" style={{padding: '6px', flex: 1}}/>
-                            <button type="submit" style={{background: '#1877f2', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '0 15px'}}>{user && user.is_admin ? "Salvar" : "Solicitar Alteração"}</button>
-                            <button type="button" onClick={() => setEditandoPessoa(null)} style={{background: '#9e9e9e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '0 15px'}}>Cancelar</button>
+                          <form onSubmit={(e) => dispararAcaoEdicao(e, 'Pessoa')} style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
+                            
+                            <div style={{display: 'flex', gap: '10px'}}>
+                              <input type="text" value={editandoPessoa.nomeCompleto} onChange={e => setEditandoPessoa({...editandoPessoa, nomeCompleto: e.target.value})} style={{padding: '6px', flex: 2, backgroundColor: '#ffffff', color: '#333333'}} required placeholder="Nome Completo"/>
+                              <input type="text" value={editandoPessoa.apelido || ''} onChange={e => setEditandoPessoa({...editandoPessoa, apelido: e.target.value})} placeholder="Apelido" style={{padding: '6px', flex: 1, backgroundColor: '#ffffff', color: '#333333'}}/>
+                            </div>
+
+                            <div style={{display: 'flex', gap: '10px'}}>
+                              <select value={editandoPessoa.pai_uuid || ''} onChange={e => setEditandoPessoa({...editandoPessoa, pai_uuid: e.target.value})} style={{flex: 1, padding: '6px', backgroundColor: '#ffffff', color: '#333333'}}>
+                                <option value="">Pai (Não Definido)</option>
+                                {listaPessoas.filter(x => x.uuid !== p.uuid).map(op => <option key={op.uuid} value={op.uuid}>{op.nome}</option>)}
+                              </select>
+                              <select value={editandoPessoa.mae_uuid || ''} onChange={e => setEditandoPessoa({...editandoPessoa, mae_uuid: e.target.value})} style={{flex: 1, padding: '6px', backgroundColor: '#ffffff', color: '#333333'}}>
+                                <option value="">Mãe (Não Definida)</option>
+                                {listaPessoas.filter(x => x.uuid !== p.uuid).map(op => <option key={op.uuid} value={op.uuid}>{op.nome}</option>)}
+                              </select>
+                              <select value={editandoPessoa.conjuge_uuid || ''} onChange={e => setEditandoPessoa({...editandoPessoa, conjuge_uuid: e.target.value})} style={{flex: 1, padding: '6px', backgroundColor: '#ffffff', color: '#333333'}}>
+                                <option value="">Cônjuge (Não Definido)</option>
+                                {listaPessoas.filter(x => x.uuid !== p.uuid).map(op => <option key={op.uuid} value={op.uuid}>{op.nome}</option>)}
+                              </select>
+                            </div>
+
+                            <div style={{display: 'flex', justifyContent: 'flex-end', gap: '10px'}}>
+                              <button type="button" onClick={() => setEditandoPessoa(null)} style={{background: '#9e9e9e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '8px 15px'}}>Cancelar</button>
+                              <button type="submit" style={{background: '#1877f2', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '8px 15px'}}>{user && user.is_admin ? "Salvar Tudo" : "Solicitar Alteração"}</button>
+                            </div>
                           </form>
                         </td>
                       ) : (
@@ -339,11 +421,36 @@ function Admin({ user }) {
                     <tr key={e.uuid} style={{borderBottom: '1px solid #e9ecef'}}>
                       {editandoEvento && editandoEvento.uuid === e.uuid ? (
                         <td colSpan="4" style={{padding: '12px', background: '#f5f5f5'}}>
-                          <form onSubmit={(ev) => dispararAcaoEdicao(ev, 'Evento')} style={{display: 'flex', gap: '10px', flexWrap: 'wrap'}}>
-                            <input type="text" value={editandoEvento.tipo} onChange={ev => setEditandoEvento({...editandoEvento, tipo: ev.target.value})} style={{padding: '6px', flex: 1}} required placeholder="Tipo (Ex: Casamento)"/>
-                            <input type="text" value={editandoEvento.local || ''} onChange={ev => setEditandoEvento({...editandoEvento, local: ev.target.value})} style={{padding: '6px', flex: 1}} placeholder="Local"/>
-                            <button type="submit" style={{background: '#1877f2', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '0 15px'}}>{user && user.is_admin ? "Salvar" : "Solicitar Alteração"}</button>
-                            <button type="button" onClick={() => setEditandoEvento(null)} style={{background: '#9e9e9e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '0 15px'}}>Cancelar</button>
+                          <form onSubmit={(ev) => dispararAcaoEdicao(ev, 'Evento')} style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
+                            
+                            <div style={{display: 'flex', gap: '10px'}}>
+                              <input type="text" value={editandoEvento.tipo} onChange={ev => setEditandoEvento({...editandoEvento, tipo: ev.target.value})} style={{padding: '6px', flex: 1, backgroundColor: '#ffffff', color: '#333333'}} required placeholder="Tipo (Ex: Casamento)"/>
+                              <input type="text" value={editandoEvento.local || ''} onChange={ev => setEditandoEvento({...editandoEvento, local: ev.target.value})} style={{padding: '6px', flex: 1, backgroundColor: '#ffffff', color: '#333333'}} placeholder="Local"/>
+                            </div>
+
+                            <textarea value={editandoEvento.descricao || ''} onChange={ev => setEditandoEvento({...editandoEvento, descricao: ev.target.value})} style={{padding: '6px', width: '100%', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: '#ffffff', color: '#333333'}} placeholder="Descrição do evento" rows="2"></textarea>
+
+                            <div style={{padding: '10px', background: '#fff', border: '1px solid #ccc', borderRadius: '4px'}}>
+                              <label style={{display: 'block', marginBottom: '8px', fontWeight: 'bold'}}>Atualizar Participantes:</label>
+                              <div style={{maxHeight: '120px', overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '5px'}}>
+                                {listaPessoas.map(p => (
+                                  <label key={p.uuid} style={{display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.85rem', color: '#333333'}}>
+                                    <input 
+                                      type="checkbox" 
+                                      checked={(editandoEvento.participantes || []).includes(p.uuid)}
+                                      onChange={() => toggleParticipanteEdicao(p.uuid)}
+                                    />
+                                    {p.nome}
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div style={{display: 'flex', justifyContent: 'flex-end', gap: '10px'}}>
+                              <button type="button" onClick={() => setEditandoEvento(null)} style={{background: '#9e9e9e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '8px 15px'}}>Cancelar</button>
+                              <button type="submit" style={{background: '#1877f2', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '8px 15px'}}>{user && user.is_admin ? "Salvar Tudo" : "Solicitar Alteração"}</button>
+                            </div>
+
                           </form>
                         </td>
                       ) : (
@@ -352,7 +459,7 @@ function Admin({ user }) {
                           <td style={{padding: '12px', whiteSpace: 'nowrap'}}>{e.data}</td>
                           <td style={{padding: '12px', whiteSpace: 'nowrap'}}>{e.local || '-'}</td>
                           <td style={{padding: '12px', textAlign: 'right', whiteSpace: 'nowrap'}}>
-                            <button onClick={() => setEditandoEvento({uuid: e.uuid, tipo: e.tipo, local: e.local})} style={{padding: '5px 10px', marginRight: '5px', background: '#ffb300', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>Editar</button>
+                            <button onClick={() => setEditandoEvento({uuid: e.uuid, tipo: e.tipo, local: e.local, descricao: e.descricao, participantes: []})} style={{padding: '5px 10px', marginRight: '5px', background: '#ffb300', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>Editar</button>
                             <button onClick={() => dispararAcaoExclusao('Evento', e.uuid)} style={{padding: '5px 10px', background: '#d32f2f', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>Excluir</button>
                           </td>
                         </>
