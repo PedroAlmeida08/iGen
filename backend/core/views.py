@@ -20,7 +20,7 @@ from .models import (
 
 def obter_contexto_familia(request):
     """
-    Valida a sessão e verifica se o utilizador tem acesso à família especificada.
+    Valida a sessão e verifica se o usuário tem acesso à família especificada.
     Retorna: FamiliaWorkspace (DB Relacional), FamiliaNode (Grafo), MembroFamilia, Erro
     """
     if not request.user.is_authenticated:
@@ -67,11 +67,11 @@ def api_registrar_usuario(request):
             email = dados.get('email', '')
 
             if User.objects.filter(username=username).exists():
-                return HttpResponseBadRequest("Nome de utilizador já existe.")
+                return HttpResponseBadRequest("Nome de usuário já existe.")
 
             User.objects.create_user(
                 username=username, password=password, email=email)
-            return JsonResponse({'message': 'Utilizador criado com sucesso!'})
+            return JsonResponse({'message': 'Usuário criado com sucesso!'})
         except Exception as e:
             return HttpResponseBadRequest(f"Erro ao registar: {str(e)}")
 
@@ -91,7 +91,7 @@ def api_login(request):
                 'user': {'id': user.id, 'username': user.username}
             })
         else:
-            return JsonResponse({'message': 'Utilizador ou palavra-passe incorretos.'}, status=401)
+            return JsonResponse({'message': 'Usuário ou senha incorretos.'}, status=401)
 
 
 @csrf_exempt
@@ -101,7 +101,7 @@ def api_logout(request):
 
 
 def api_check_auth(request):
-    """Verifica a sessão e devolve a lista de famílias a que o utilizador tem acesso"""
+    """Verifica a sessão e devolve a lista de famílias a que o usuário tem acesso"""
     if request.user.is_authenticated:
         familias = MembroFamilia.objects.filter(
             usuario=request.user).select_related('familia')
@@ -189,10 +189,12 @@ def api_listar_pessoas(request):
 
     elif request.method == 'POST':
         if membro.funcao == 'LEITOR':
-            return HttpResponseForbidden("Leitores não podem registar novas pessoas.")
+            return HttpResponseForbidden("Leitores não podem registrar novas pessoas.")
 
         try:
             dados = json.loads(request.body)
+
+            # Tratamento da Data de Nascimento
             data_str = dados.get('dataNascimento')
             data_nasc_obj = None
             if data_str:
@@ -201,6 +203,16 @@ def api_listar_pessoas(request):
                         data_str, '%Y-%m-%d').date()
                 except ValueError:
                     return HttpResponseBadRequest("Data de nascimento inválida.")
+
+            # Tratamento da Data de Óbito (NOVO)
+            data_obito_str = dados.get('dataObito')
+            data_obito_obj = None
+            if data_obito_str:
+                try:
+                    data_obito_obj = datetime.strptime(
+                        data_obito_str, '%Y-%m-%d').date()
+                except ValueError:
+                    return HttpResponseBadRequest("Data de óbito inválida.")
 
             # Cria a pessoa
             nova_pessoa = Pessoa(
@@ -228,6 +240,17 @@ def api_listar_pessoas(request):
                 ).save()
                 evento_nasc.pertence_a.connect(familia_node)
                 nova_pessoa.participou.connect(evento_nasc)
+
+            # AUTOMAÇÃO: EVENTO DE ÓBITO (NOVO)
+            if data_obito_obj:
+                evento_obito = Evento(
+                    tipo='Óbito',
+                    data=data_obito_obj,
+                    descricao=f"Falecimento de {nova_pessoa.nomeCompleto}",
+                    local="Não informado"
+                ).save()
+                evento_obito.pertence_a.connect(familia_node)
+                nova_pessoa.participou.connect(evento_obito)
 
             # AUTOMAÇÃO: PAIS E CASAMENTOS (Apenas liga se os originais pertencerem à família)
             uuid_pai = dados.get('pai_uuid')
@@ -272,7 +295,7 @@ def api_listar_pessoas(request):
                 except Pessoa.DoesNotExist:
                     pass
 
-            return JsonResponse({'message': 'Registo e automações criados com sucesso!', 'uuid': nova_pessoa.uuid}, status=201)
+            return JsonResponse({'message': 'Registro e automações criados com sucesso!', 'uuid': nova_pessoa.uuid}, status=201)
         except Exception as e:
             return HttpResponseBadRequest(f"Erro ao processar: {str(e)}")
 
@@ -311,17 +334,17 @@ def api_detalhe_pessoa(request, uuid):
 
     elif request.method == 'DELETE':
         if membro.funcao != 'ADMIN':
-            return HttpResponseForbidden("Apenas administradores da família podem excluir registos.")
+            return HttpResponseForbidden("Apenas administradores da família podem excluir registros.")
 
         nome_pessoa = pessoa.nomeCompleto
         pessoa.delete()
         registrar_log(request.user, familia_ws, "Excluiu",
                       "Pessoa", f"Apagou permanentemente: {nome_pessoa}")
-        return JsonResponse({'message': 'Registo excluído com sucesso.'})
+        return JsonResponse({'message': 'Registro excluído com sucesso.'})
 
     elif request.method == 'PUT':
         if membro.funcao != 'ADMIN':
-            return HttpResponseForbidden("Apenas administradores da família podem editar registos.")
+            return HttpResponseForbidden("Apenas administradores da família podem editar registros.")
 
         dados = json.loads(request.body)
         nome_antigo = pessoa.nomeCompleto
@@ -451,7 +474,7 @@ def api_listar_eventos(request):
             novo_evento.pertence_a.connect(familia_node)
 
             registrar_log(request.user, familia_ws, "Criou",
-                          "Evento", f"Registou o evento: {novo_evento.tipo}")
+                          "Evento", f"Registrou o evento: {novo_evento.tipo}")
             return JsonResponse({'message': 'Evento criado com sucesso!', 'uuid': novo_evento.uuid}, status=201)
         except Exception as e:
             return HttpResponseBadRequest(f"Erro ao criar evento: {str(e)}")
@@ -681,7 +704,7 @@ def api_processar_solicitacao(request, id):
 
                 if solicitacao.tipo_acao == 'Excluir':
                     nome_registro = getattr(
-                        node, 'nomeCompleto', getattr(node, 'tipo', 'Registo'))
+                        node, 'nomeCompleto', getattr(node, 'tipo', 'Registro'))
                     node.delete()
                     registrar_log(request.user, familia_ws, "Excluiu",
                                   solicitacao.entidade, f"Excluiu {nome_registro} após aprovação")
@@ -699,7 +722,7 @@ def api_processar_solicitacao(request, id):
                             'descricao', node.descricao)
                     node.save()
                     registrar_log(request.user, familia_ws, "Editou",
-                                  solicitacao.entidade, "Editou registo após aprovação")
+                                  solicitacao.entidade, "Editou registro após aprovação")
 
                 solicitacao.status = 'APROVADA'
                 solicitacao.save()
@@ -741,7 +764,7 @@ def api_criar_familia(request):
                 nome=nome_familia
             ).save()
 
-            # 3. Dá poderes de Administrador ao utilizador que criou
+            # 3. Dá poderes de Administrador ao usuário que criou
             MembroFamilia.objects.create(
                 usuario=request.user,
                 familia=familia_ws,
@@ -785,9 +808,9 @@ def api_resgatar_dados_antigos(request):
         RETURN count(n)
         """
         results, _ = db.cypher_query(query, {'uuid': familia_node.uuid})
-        registos_afetados = results[0][0]
+        registros_afetados = results[0][0]
 
         registrar_log(request.user, familia_ws, "Importou", "Manutenção",
-                      f"Resgatou {registos_afetados} registos órfãos.")
+                      f"Resgatou {registros_afetados} registros órfãos.")
 
-        return JsonResponse({'message': f'{registos_afetados} registos antigos foram integrados na sua família.'})
+        return JsonResponse({'message': f'{registros_afetados} registros antigos foram integrados na sua família.'})

@@ -5,43 +5,55 @@ function Admin({ user }) {
   const [activeTab, setActiveTab] = useState('pessoa'); 
   const [msg, setMsg] = useState('');
 
-  // Listas de Dados
   const [listaPessoas, setListaPessoas] = useState([]);
   const [listaEventos, setListaEventos] = useState([]);
   const [listaLogs, setListaLogs] = useState([]);
   const [listaSolicitacoes, setListaSolicitacoes] = useState([]); 
 
-  // Estados de Edição
   const [editandoPessoa, setEditandoPessoa] = useState(null);
   const [editandoEvento, setEditandoEvento] = useState(null);
 
   // --- STATE DOS FORMULÁRIOS (Create) ---
   const [formPessoa, setFormPessoa] = useState({ 
-    nomeCompleto: '', apelido: '', dataNascimento: '',
+    nomeCompleto: '', apelido: '', dataNascimento: '', dataObito: '', // NOVO CAMPO AQUI
     pai_uuid: '', mae_uuid: '', conjuge_uuid: '', dataCasamento: ''
   });
   const [formEvento, setFormEvento] = useState({ tipo: '', data: '', local: '', descricao: '' });
   const [formRelacao, setFormRelacao] = useState({ origem_uuid: '', destino_uuid: '', tipo: 'PAI' });
 
-  // --- STATE DO MODAL DE SOLICITAÇÃO ---
   const [modalOpen, setModalOpen] = useState(false);
   const [solicitacaoAtual, setSolicitacaoAtual] = useState({
     tipo_acao: '', entidade: '', uuid_entidade: '', motivo: '', dados_novos: null
   });
 
-  // --- BUSCA DADOS ---
+  const familiaAtiva = localStorage.getItem('familiaAtiva');
+  const temFamilia = familiaAtiva && familiaAtiva !== 'undefined' && familiaAtiva !== 'null';
+
+  const getHeaders = () => ({
+    'Content-Type': 'application/json',
+    'X-Familia-UUID': temFamilia ? familiaAtiva : ''
+  });
+
   const carregarDados = () => {
-    fetch('http://localhost:8000/api/pessoas/').then(res => res.json()).then(data => setListaPessoas(data));
-    fetch('http://localhost:8000/api/eventos/').then(res => res.json()).then(data => setListaEventos(data));
+    if (!temFamilia) return;
+    fetch('http://localhost:8000/api/pessoas/', { headers: getHeaders(), credentials: 'include' })
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setListaPessoas(Array.isArray(data) ? data : []))
+      .catch(err => console.error(err));
+
+    fetch('http://localhost:8000/api/eventos/', { headers: getHeaders(), credentials: 'include' })
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setListaEventos(Array.isArray(data) ? data : []))
+      .catch(err => console.error(err));
   };
 
   const carregarDadosAdmin = async () => {
-    if (user && user.is_admin) {
+    if (user && user.is_admin && temFamilia) {
       try {
-        const resLogs = await fetch('http://localhost:8000/api/logs/', { credentials: 'include' });
+        const resLogs = await fetch('http://localhost:8000/api/logs/', { headers: getHeaders(), credentials: 'include' });
         if (resLogs.ok) setListaLogs(await resLogs.json());
 
-        const resSol = await fetch('http://localhost:8000/api/solicitacoes/', { credentials: 'include' });
+        const resSol = await fetch('http://localhost:8000/api/solicitacoes/', { headers: getHeaders(), credentials: 'include' });
         if (resSol.ok) setListaSolicitacoes(await resSol.json());
       } catch (error) { console.error(error); }
     }
@@ -50,19 +62,19 @@ function Admin({ user }) {
   useEffect(() => {
     carregarDados();
     carregarDadosAdmin();
-  }, [user]);
+  }, [user, familiaAtiva]);
 
-  // --- HANDLERS DE CRIAÇÃO ---
   const salvarPessoa = async (e) => {
     e.preventDefault();
     try {
       const res = await fetch('http://localhost:8000/api/pessoas/', {
-        method: 'POST', headers: {'Content-Type': 'application/json'}, credentials: 'include',
+        method: 'POST', headers: getHeaders(), credentials: 'include',
         body: JSON.stringify(formPessoa)
       });
       if(res.ok) {
-        setMsg("✅ Pessoa cadastrada!");
-        setFormPessoa({ nomeCompleto: '', apelido: '', dataNascimento: '', pai_uuid: '', mae_uuid: '', conjuge_uuid: '', dataCasamento: '' });
+        setMsg("✅ Pessoa e eventos registrados!");
+        // Limpa o novo campo ao salvar
+        setFormPessoa({ nomeCompleto: '', apelido: '', dataNascimento: '', dataObito: '', pai_uuid: '', mae_uuid: '', conjuge_uuid: '', dataCasamento: '' });
         carregarDados(); carregarDadosAdmin();
       } else { setMsg("❌ Erro ao salvar"); }
     } catch(err) { setMsg("Erro de conexão."); }
@@ -72,7 +84,7 @@ function Admin({ user }) {
     e.preventDefault();
     try {
       const res = await fetch('http://localhost:8000/api/eventos/', {
-        method: 'POST', headers: {'Content-Type': 'application/json'}, credentials: 'include',
+        method: 'POST', headers: getHeaders(), credentials: 'include',
         body: JSON.stringify(formEvento)
       });
       if(res.ok) {
@@ -87,7 +99,7 @@ function Admin({ user }) {
     e.preventDefault();
     try {
       const res = await fetch('http://localhost:8000/api/relacionar/', {
-        method: 'POST', headers: {'Content-Type': 'application/json'}, credentials: 'include',
+        method: 'POST', headers: getHeaders(), credentials: 'include',
         body: JSON.stringify(formRelacao)
       });
       if(res.ok) {
@@ -96,13 +108,12 @@ function Admin({ user }) {
     } catch(err) { setMsg("Erro de conexão."); }
   };
 
-  // --- FLUXO DE SOLICITAÇÃO VS AÇÃO DIRETA ---
   const dispararAcaoExclusao = async (entidade, uuid) => {
     if (user && user.is_admin) {
       if (!window.confirm(`Admin: Tem certeza que deseja excluir este(a) ${entidade} permanentemente?`)) return;
       try {
         const url = entidade === 'Pessoa' ? `http://localhost:8000/api/pessoas/${uuid}/` : `http://localhost:8000/api/eventos/${uuid}/`;
-        const res = await fetch(url, { method: 'DELETE', credentials: 'include' });
+        const res = await fetch(url, { method: 'DELETE', headers: getHeaders(), credentials: 'include' });
         if (res.ok) {
           setMsg(`🗑️ ${entidade} excluído(a) com sucesso.`);
           carregarDados(); carregarDadosAdmin();
@@ -122,7 +133,7 @@ function Admin({ user }) {
       try {
         const url = entidade === 'Pessoa' ? `http://localhost:8000/api/pessoas/${dados.uuid}/` : `http://localhost:8000/api/eventos/${dados.uuid}/`;
         const res = await fetch(url, {
-          method: 'PUT', headers: {'Content-Type': 'application/json'}, credentials: 'include', body: JSON.stringify(dados)
+          method: 'PUT', headers: getHeaders(), credentials: 'include', body: JSON.stringify(dados)
         });
         if (res.ok) {
           setMsg(`✅ ${entidade} atualizado(a) com sucesso!`);
@@ -140,7 +151,7 @@ function Admin({ user }) {
     e.preventDefault();
     try {
       const res = await fetch('http://localhost:8000/api/solicitacoes/', {
-        method: 'POST', headers: {'Content-Type': 'application/json'}, credentials: 'include',
+        method: 'POST', headers: getHeaders(), credentials: 'include',
         body: JSON.stringify(solicitacaoAtual)
       });
       if (res.ok) {
@@ -154,7 +165,7 @@ function Admin({ user }) {
   const julgarSolicitacao = async (id, acao) => {
     try {
       const res = await fetch(`http://localhost:8000/api/solicitacoes/${id}/`, {
-        method: 'PUT', headers: {'Content-Type': 'application/json'}, credentials: 'include',
+        method: 'PUT', headers: getHeaders(), credentials: 'include',
         body: JSON.stringify({ acao })
       });
       if (res.ok) {
@@ -164,10 +175,12 @@ function Admin({ user }) {
     } catch(err) { setMsg("Erro de conexão."); }
   };
 
+  if (!temFamilia) {
+    return <div style={{padding: '50px', textAlign: 'center'}}><h2>Crie ou selecione uma família na barra superior para acessar o painel administrativo.</h2></div>;
+  }
 
   return (
     <div className="admin-container">
-      {/* --- MODAL DE SOLICITAÇÃO --- */}
       {modalOpen && (
         <div style={{
           position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', 
@@ -191,14 +204,12 @@ function Admin({ user }) {
         </div>
       )}
 
-      {/* ABAS DE NAVEGAÇÃO */}
       <div className="admin-tabs">
         <button className={`tab-btn ${activeTab === 'pessoa' ? 'active' : ''}`} onClick={() => {setActiveTab('pessoa'); setMsg('');}}>👤 Nova Pessoa</button>
         <button className={`tab-btn ${activeTab === 'evento' ? 'active' : ''}`} onClick={() => {setActiveTab('evento'); setMsg('');}}>📅 Novo Evento</button>
         <button className={`tab-btn ${activeTab === 'relacao' ? 'active' : ''}`} onClick={() => {setActiveTab('relacao'); setMsg('');}}>🔗 Criar Laços</button>
         <button className={`tab-btn ${activeTab === 'gerenciar' ? 'active' : ''}`} onClick={() => {setActiveTab('gerenciar'); setMsg('');}}>📋 Gerenciar Dados</button>
         
-        {/* ABAS EXCLUSIVAS DE ADMIN */}
         {user && user.is_admin && (
           <>
             <button className={`tab-btn ${activeTab === 'aprovacoes' ? 'active' : ''}`} onClick={() => {setActiveTab('aprovacoes'); setMsg(''); carregarDadosAdmin();}} style={{marginLeft: 'auto', backgroundColor: activeTab === 'aprovacoes' ? '#fff3e0' : 'transparent', color: activeTab === 'aprovacoes' ? '#e65100' : 'inherit'}}>
@@ -214,31 +225,42 @@ function Admin({ user }) {
       <div className="admin-content">
         {msg && <div className="success-msg">{msg}</div>}
 
-        {/* --- ABA 1: PESSOA --- */}
         {activeTab === 'pessoa' && (
            <form onSubmit={salvarPessoa}>
-           <h2 className="form-title">Cadastrar Familiar</h2>
-           <div className="form-group"><label>Nome</label><input required type="text" value={formPessoa.nomeCompleto} onChange={e => setFormPessoa({...formPessoa, nomeCompleto: e.target.value})} /></div>
-           <div className="form-group" style={{display:'flex', gap:'20px'}}>
-               <div style={{flex:1}}><label>Nascimento</label><input required type="date" value={formPessoa.dataNascimento} onChange={e => setFormPessoa({...formPessoa, dataNascimento: e.target.value})} /></div>
-               <div style={{flex:1}}><label>Apelido</label><input type="text" value={formPessoa.apelido} onChange={e => setFormPessoa({...formPessoa, apelido: e.target.value})} /></div>
-           </div>
-           <button type="submit" className="submit-btn" style={{marginTop:'10px'}}>Salvar Pessoa</button>
-         </form>
+             <h2 className="form-title">Cadastrar Familiar</h2>
+             <div className="form-group">
+               <label>Nome *</label>
+               <input required type="text" value={formPessoa.nomeCompleto} onChange={e => setFormPessoa({...formPessoa, nomeCompleto: e.target.value})} />
+             </div>
+             <div className="form-group" style={{display:'flex', gap:'20px'}}>
+                 <div style={{flex:1}}>
+                   <label>Nascimento *</label>
+                   <input required type="date" value={formPessoa.dataNascimento} onChange={e => setFormPessoa({...formPessoa, dataNascimento: e.target.value})} />
+                 </div>
+                 <div style={{flex:1}}>
+                   {/* NOVO CAMPO: Óbito opcional */}
+                   <label>Óbito (Opcional)</label>
+                   <input type="date" value={formPessoa.dataObito} onChange={e => setFormPessoa({...formPessoa, dataObito: e.target.value})} />
+                 </div>
+                 <div style={{flex:1}}>
+                   <label>Apelido</label>
+                   <input type="text" value={formPessoa.apelido} onChange={e => setFormPessoa({...formPessoa, apelido: e.target.value})} />
+                 </div>
+             </div>
+             <button type="submit" className="submit-btn" style={{marginTop:'10px'}}>Salvar Pessoa</button>
+           </form>
         )}
 
-        {/* --- ABA 2: EVENTO --- */}
         {activeTab === 'evento' && (
            <form onSubmit={salvarEvento}>
            <h2 className="form-title">Registrar Evento Histórico</h2>
-           <div className="form-group"><label>Tipo</label><input required type="text" value={formEvento.tipo} onChange={e => setFormEvento({...formEvento, tipo: e.target.value})} /></div>
-           <div className="form-group"><label>Data</label><input required type="date" value={formEvento.data} onChange={e => setFormEvento({...formEvento, data: e.target.value})} /></div>
+           <div className="form-group"><label>Tipo *</label><input required type="text" value={formEvento.tipo} onChange={e => setFormEvento({...formEvento, tipo: e.target.value})} /></div>
+           <div className="form-group"><label>Data *</label><input required type="date" value={formEvento.data} onChange={e => setFormEvento({...formEvento, data: e.target.value})} /></div>
            <div className="form-group"><label>Local</label><input type="text" value={formEvento.local} onChange={e => setFormEvento({...formEvento, local: e.target.value})} /></div>
            <button type="submit" className="submit-btn">Salvar Evento</button>
          </form>
         )}
 
-        {/* --- ABA 3: RELACIONAMENTO --- */}
         {activeTab === 'relacao' && (
           <form onSubmit={salvarRelacionamento}>
             <h2 className="form-title">Conectar Nós (Manual)</h2>
@@ -249,7 +271,7 @@ function Admin({ user }) {
                 <option value="PAI">É Pai de</option>
                 <option value="MAE">É Mãe de</option>
                 <option value="CASADO">É Casado com</option>
-                <option value="IRMAO">É Irmã(o) de</option> {/* NOVO LAÇO AQUI */}
+                <option value="IRMAO">É Irmã(o) de</option>
                 <option value="FOI">Esteve no Evento</option>
               </select>
             </div>
@@ -258,7 +280,6 @@ function Admin({ user }) {
           </form>
         )}
 
-        {/* --- ABA 4: GERENCIAR --- */}
         {activeTab === 'gerenciar' && (
           <div>
             <h2 className="form-title">Gerenciar Registros</h2>
@@ -344,7 +365,6 @@ function Admin({ user }) {
           </div>
         )}
 
-        {/* --- ABA 5: APROVAÇÕES --- */}
         {activeTab === 'aprovacoes' && (
           <div>
             <h2 className="form-title">Pedidos de Moderação</h2>
@@ -368,7 +388,6 @@ function Admin({ user }) {
           </div>
         )}
 
-        {/* --- ABA 6: LOGS --- */}
         {activeTab === 'logs' && (
           <div>
             <h2 className="form-title">Auditoria (Logs)</h2>
@@ -376,7 +395,6 @@ function Admin({ user }) {
               <table style={{width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem'}}>
                 <thead>
                   <tr style={{background: '#f8f9fa', borderBottom: '2px solid #dee2e6'}}>
-                    {/* whiteSpace: 'nowrap' forçará a tabela a não quebrar linhas nesses campos */}
                     <th style={{padding: '12px 15px', whiteSpace: 'nowrap'}}>Data/Hora</th>
                     <th style={{padding: '12px 15px', whiteSpace: 'nowrap'}}>Usuário</th>
                     <th style={{padding: '12px 15px', whiteSpace: 'nowrap'}}>Ação</th>

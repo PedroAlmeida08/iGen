@@ -1,5 +1,5 @@
 from django.db import models
-# NOVO: Sistema de utilizadores do Django
+# NOVO: Sistema de usuários do Django
 from django.contrib.auth.models import User
 from neomodel import (
     StructuredNode,
@@ -32,7 +32,7 @@ class FamiliaWorkspace(models.Model):
 
 class MembroFamilia(models.Model):
     """
-    Gere as permissões de acesso de um utilizador a um Workspace.
+    Gere as permissões de acesso de um usuário a um Workspace.
     """
     FUNCOES = [
         ('ADMIN', 'Administrador'),
@@ -48,7 +48,7 @@ class MembroFamilia(models.Model):
     aderiu_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        # Garante que um utilizador não é duplicado na mesma família
+        # Garante que um usuário não é duplicado na mesma família
         unique_together = ('usuario', 'familia')
 
     def __str__(self):
@@ -56,7 +56,7 @@ class MembroFamilia(models.Model):
 
 
 class RegistroAtividade(models.Model):
-    # Alterado para ForeignKey apontando para o Utilizador real e a Família isolada
+    # Alterado para ForeignKey apontando para o Usuário real e a Família isolada
     usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     familia = models.ForeignKey(
         FamiliaWorkspace, on_delete=models.CASCADE, null=True)

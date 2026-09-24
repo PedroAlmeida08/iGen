@@ -14,7 +14,6 @@ const getLayoutedElements = (nodes, edges) => {
   dagreGraph.setGraph({ rankdir: 'TB', nodesep: 80, ranksep: 100 });
 
   nodes.forEach((node) => {
-    // Aumentamos levemente a altura para caber o apelido confortavelmente
     dagreGraph.setNode(node.id, { width: 160, height: 70 });
   });
 
@@ -55,9 +54,18 @@ function Arvore() {
   const onNodesChange = useCallback((changes) => setNodes((nds) => applyNodeChanges(changes, nds)), []);
   const onEdgesChange = useCallback((changes) => setEdges((eds) => applyEdgeChanges(changes, eds)), []);
 
+  // --- HELPER DE CABEÇALHOS ---
+  const getHeaders = () => ({
+    'Content-Type': 'application/json',
+    'X-Familia-UUID': localStorage.getItem('familiaAtiva') || ''
+  });
+
   const carregarGrafo = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/grafo/');
+      const res = await fetch('http://localhost:8000/api/grafo/', {
+        headers: getHeaders(),
+        credentials: 'include'
+      });
       const data = await res.json();
       setGrafoDados(data);
     } catch (error) {
@@ -80,7 +88,6 @@ function Arvore() {
       return fromExiste && toExiste;
     });
 
-    // --- APLICA FILTRO DE BUSCA (NOME OU APELIDO) ---
     if (buscaNome.trim() !== '') {
       const termo = buscaNome.toLowerCase();
       const pessoasEncontradas = nosBackend.filter(n => {
@@ -105,14 +112,10 @@ function Arvore() {
       }
     }
 
-    // --- CONSTRUÇÃO DOS NÓS COM NOME E APELIDO ---
     let flowNodes = nosBackend.map(n => {
-      const isPessoa = n.group === 'pessoa';
-      
       return {
         id: n.id,
         data: { 
-          // O label agora é um mini-componente JSX com o nome e o apelido
           label: (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
               <span>{n.label}</span>
@@ -163,7 +166,10 @@ function Arvore() {
   const onNodeClick = async (event, node) => {
     setCarregandoDetalhes(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/pessoas/${node.id}/`);
+      const res = await fetch(`http://localhost:8000/api/pessoas/${node.id}/`, {
+        headers: getHeaders(),
+        credentials: 'include'
+      });
       const data = await res.json();
       setDetalhes({ ...data, tipo_entidade: 'pessoa' });
     } catch (error) {

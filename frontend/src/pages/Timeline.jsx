@@ -1,23 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import './Timeline.css';
 
 function Timeline() {
   const [eventos, setEventos] = useState([]);
-  const [eventosFiltrados, setEventosFiltrados] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Controle de ordenação da Linha do Tempo
   const [ordemAsc, setOrdemAsc] = useState(true);
 
-  // NOVOS ESTADOS PARA O MULTI-SELECT DE PESSOAS
   const [pessoas, setPessoas] = useState([]);
-  const [pessoasSelecionadas, setPessoasSelecionadas] = useState([]); // Agora é um Array
-  const [buscaParticipante, setBuscaParticipante] = useState(''); // Controla só o texto da pesquisa
+  const [pessoasSelecionadas, setPessoasSelecionadas] = useState([]); 
+  const [buscaParticipante, setBuscaParticipante] = useState(''); 
   const [mostrarDropdown, setMostrarDropdown] = useState(false);
-  const [ordemPessoasAsc, setOrdemPessoasAsc] = useState(true); // Controla a ordem do menu (A-Z ou Z-A)
+  const [ordemPessoasAsc, setOrdemPessoasAsc] = useState(true); 
   
-  // Filtros de Evento e Data
   const [buscaEvento, setBuscaEvento] = useState(''); 
   const [inicioDia, setInicioDia] = useState('');
   const [inicioMes, setInicioMes] = useState('');
@@ -25,6 +21,14 @@ function Timeline() {
   const [fimDia, setFimDia] = useState('');
   const [fimMes, setFimMes] = useState('');
   const [fimAno, setFimAno] = useState('');
+
+  const familiaAtiva = localStorage.getItem('familiaAtiva');
+  const temFamilia = familiaAtiva && familiaAtiva !== 'undefined' && familiaAtiva !== 'null';
+
+  const getHeaders = () => ({
+    'Content-Type': 'application/json',
+    'X-Familia-UUID': temFamilia ? familiaAtiva : ''
+  });
 
   const formatarNomeApelido = (nomeCompleto, apelido) => {
     if (!nomeCompleto) return "";
@@ -35,22 +39,28 @@ function Timeline() {
   };
 
   useEffect(() => {
-    fetch('http://127.0.0.1:8000/api/pessoas/')
-      .then(res => res.json())
-      .then(data => setPessoas(data))
-      .catch(err => console.error("Erro ao buscar pessoas:", err));
+    // PREVINE O ERRO 400 BLOQUEANDO O FETCH CASO NÃO EXISTA FAMÍLIA
+    if (!temFamilia) {
+      setLoading(false);
+      return;
+    }
 
-    fetch('http://127.0.0.1:8000/api/eventos/')
-      .then(res => res.json())
-      .then(data => {
-        setEventos(data);
-        setLoading(false);
-      })
-      .catch(err => console.error("Erro ao buscar timeline:", err));
-  }, []);
+    Promise.all([
+      fetch('http://localhost:8000/api/pessoas/', { headers: getHeaders(), credentials: 'include' }).then(res => res.ok ? res.json() : []),
+      fetch('http://localhost:8000/api/eventos/', { headers: getHeaders(), credentials: 'include' }).then(res => res.ok ? res.json() : [])
+    ])
+    .then(([pessoasData, eventosData]) => {
+      if (Array.isArray(pessoasData)) setPessoas(pessoasData);
+      if (Array.isArray(eventosData)) setEventos(eventosData);
+      setLoading(false);
+    })
+    .catch(err => {
+      console.error("Erro ao buscar timeline:", err);
+      setLoading(false);
+    });
+  }, [familiaAtiva]);
 
-  // Lógica de Filtragem e Ordenação da Linha do Tempo
-  useEffect(() => {
+  const eventosFiltrados = useMemo(() => {
     let resultado = [...eventos];
 
     if (buscaEvento.trim() !== '') {
@@ -60,7 +70,6 @@ function Timeline() {
       );
     }
 
-    // NOVO: Verifica se o evento possui PELO MENOS UM dos participantes selecionados
     if (pessoasSelecionadas.length > 0) {
       resultado = resultado.filter(evento => {
         if (evento.participantes && evento.participantes.length > 0) {
@@ -93,22 +102,17 @@ function Timeline() {
     }
 
     resultado.sort((a, b) => {
-      const dataInvalidaA = !a.data || a.data.includes("desc");
-      const dataInvalidaB = !b.data || b.data.includes("desc");
+      // Se não houver data, joga o evento para o final simulando uma data gigante
+      const dataA = (a.data && !a.data.includes("desc")) ? a.data : "9999-99-99"; 
+      const dataB = (b.data && !b.data.includes("desc")) ? b.data : "9999-99-99";
       
-      if (dataInvalidaA && dataInvalidaB) return 0;
-      if (dataInvalidaA) return 1;
-      if (dataInvalidaB) return -1;
-
-      const dateA = new Date(a.data);
-      const dateB = new Date(b.data);
-      return ordemAsc ? dateA - dateB : dateB - dateA;
+      // Compara alfabeticamente no formato YYYY-MM-DD
+      return ordemAsc ? dataA.localeCompare(dataB) : dataB.localeCompare(dataA);
     });
 
-    setEventosFiltrados(resultado);
+    return resultado;
   }, [buscaEvento, pessoasSelecionadas, inicioDia, inicioMes, inicioAno, fimDia, fimMes, fimAno, eventos, ordemAsc]);
 
-  // NOVO: Prepara a lista do Menu Suspenso (Filtra pelo texto e Ordena dinamicamente)
   const pessoasDropdown = pessoas
     .filter(p => formatarNomeApelido(p.nome, p.apelido).toLowerCase().includes(buscaParticipante.toLowerCase()))
     .sort((a, b) => {
@@ -117,12 +121,11 @@ function Timeline() {
       return ordemPessoasAsc ? nomeA.localeCompare(nomeB) : nomeB.localeCompare(nomeA);
     });
 
-  // NOVO: Adiciona ou remove a pessoa da lista de selecionados
   const togglePessoa = (uuid) => {
     if (pessoasSelecionadas.includes(uuid)) {
-      setPessoasSelecionadas(prev => prev.filter(id => id !== uuid)); // Remove se já estiver
+      setPessoasSelecionadas(prev => prev.filter(id => id !== uuid)); 
     } else {
-      setPessoasSelecionadas(prev => [...prev, uuid]); // Adiciona se não estiver
+      setPessoasSelecionadas(prev => [...prev, uuid]); 
     }
   };
 
@@ -130,7 +133,7 @@ function Timeline() {
   const limparSelecao = () => setPessoasSelecionadas([]);
 
   const handleEventClick = (uuid) => {
-    fetch(`http://127.0.0.1:8000/api/eventos/${uuid}/`)
+    fetch(`http://localhost:8000/api/eventos/${uuid}/`, { headers: getHeaders(), credentials: 'include' })
       .then(res => res.json())
       .then(data => setSelectedEvent(data))
       .catch(err => console.error("Erro ao buscar detalhes:", err));
@@ -175,7 +178,6 @@ function Timeline() {
             style={{ minWidth: '280px' }}
           />
 
-          {/* Exibe um resumo de quem está selecionado embaixo do campo */}
           <div style={{ marginTop: '5px', fontSize: '0.80rem', color: '#666', maxWidth: '280px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {pessoasSelecionadas.length > 0 
               ? `Selecionados (${pessoasSelecionadas.length}): ${pessoasSelecionadas.map(id => {
@@ -187,7 +189,6 @@ function Timeline() {
           
           {mostrarDropdown && (
             <div 
-              // Impede que clicar dentro do menu tire o foco do Input e feche a lista
               onMouseDown={(e) => e.preventDefault()}
               style={{
                 position: 'absolute',
@@ -203,7 +204,6 @@ function Timeline() {
                 flexDirection: 'column'
               }}
             >
-              {/* CABEÇALHO DO MENU COM OS BOTÕES DE CONTROLE */}
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f9fafb', borderTopLeftRadius: '6px', borderTopRightRadius: '6px' }}>
                 <div>
                   <button onClick={selecionarTodos} style={{ border: 'none', background: 'none', color: '#1877f2', cursor: 'pointer', fontSize: '0.85rem', marginRight: '10px' }}>Todos</button>
@@ -214,7 +214,6 @@ function Timeline() {
                 </button>
               </div>
 
-              {/* LISTA DE PESSOAS COM CHECKBOX */}
               <ul style={{ maxHeight: '200px', overflowY: 'auto', listStyle: 'none', padding: 0, margin: 0 }}>
                 {pessoasDropdown.length > 0 ? pessoasDropdown.map(p => (
                   <li 
@@ -249,7 +248,6 @@ function Timeline() {
           )}
         </div>
 
-        {/* CONTAINER FLEXÍVEL PARA DATAS */}
         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'flex-start', width: '100%' }}>
           
           <div className="filter-group" style={{ borderLeft: '2px solid #e0e0e0', paddingLeft: '15px' }}>
@@ -282,7 +280,6 @@ function Timeline() {
             </div>
           </div>
 
-          {/* Botões de Ordenação e Limpeza */}
           <div style={{ display: 'flex', gap: '10px', marginLeft: 'auto', alignSelf: 'flex-end', marginTop: '22px' }}>
             <button 
               className="btn-limpar" 
@@ -328,7 +325,6 @@ function Timeline() {
         </div>
       )}
 
-      {/* PAINEL LATERAL DE DETALHES DO EVENTO */}
       {selectedEvent && (
         <div className="details-panel">
           <div className="details-header" style={{display:'flex', justifyContent:'space-between'}}>

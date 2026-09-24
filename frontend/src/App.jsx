@@ -11,40 +11,54 @@ import Sobre from './pages/Sobre';
 import './App.css';
 
 function App() {
-  const [user, setUser] = useState(null); // Aqui guardamos quem está logado
+  const [user, setUser] = useState(null); 
+  const [familias, setFamilias] = useState([]); 
 
-  // Verifica sessão ao carregar a página (F5)
   useEffect(() => {
     fetch('http://127.0.0.1:8000/api/auth/check/', { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         if (data.is_logged_in) {
           setUser(data.user);
+          setFamilias(data.familias); 
+
+          const familiaAtiva = localStorage.getItem('familiaAtiva');
+          const pertenceAFamilia = data.familias.some(f => f.uuid === familiaAtiva);
+          
+          if (!pertenceAFamilia && data.familias.length > 0) {
+             localStorage.setItem('familiaAtiva', data.familias[0].uuid);
+          }
         }
       })
-      .catch(err => console.log("Não logado"));
+      .catch(err => console.log("Não autenticado"));
   }, []);
 
   return (
     <Router>
       <div className="app-main">
-        {/* Passamos o user e a função setUser para a Navbar */}
-        <Navbar user={user} setUser={setUser} />
+        <Navbar user={user} setUser={setUser} familias={familias} />
         
         <div className="content-wrap">
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/arvore" element={<Arvore />} />
-            <Route path="/timeline" element={<Timeline />} />
+            <Route path="/sobre" element={<Sobre />} />
             
-            {/* Passamos setUser para o Login, para ele atualizar a Navbar ao entrar */}
             <Route path="/login" element={<Login setUser={setUser} />} />
             <Route path="/register" element={<Register />} />
             
-            {/* Passando user={user} para o componente Admin */}
-            <Route path="/admin" element={user ? <Admin user={user} /> : <div style={{padding:'50px', textAlign:'center', color:'red'}}><h2>Acesso Negado. Faça Login.</h2></div>} />
-
-            <Route path="/sobre" element={<Sobre />} />
+            {/* --- ROTAS PROTEGIDAS (Exigem Autenticação) --- */}
+            <Route 
+              path="/arvore" 
+              element={user ? <Arvore /> : <Navigate to="/login" replace />} 
+            />
+            <Route 
+              path="/timeline" 
+              element={user ? <Timeline /> : <Navigate to="/login" replace />} 
+            />
+            <Route 
+              path="/admin" 
+              element={user ? <Admin user={user} /> : <Navigate to="/login" replace />} 
+            />
           </Routes>
         </div>
       </div>
