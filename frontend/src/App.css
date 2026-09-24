@@ -37,3 +37,15 @@ body {
   width: 100%;
   /* Removemos o padding daqui para deixar cada página decidir seu espaçamento */
 }
+
+/* Força o fundo claro e texto escuro em todos os campos */
+input, textarea, select {
+    background-color: #ffffff !important; 
+    color: #333333 !important;
+    border: 1px solid #ccc;
+}
+
+/* Ajusta a cor do texto de exemplo (placeholder) para ficar legível */
+input::placeholder, textarea::placeholder {
+    color: #888888 !important;
+}
