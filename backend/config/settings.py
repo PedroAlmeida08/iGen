@@ -11,6 +11,8 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 from neomodel import config
 from pathlib import Path
+# NOVO: Importação dos cabeçalhos padrão
+from corsheaders.defaults import default_headers
 
 # Ajuste a senha conforme a que você definiu no Neo4j Desktop/Browser
 config.DATABASE_URL = 'bolt://neo4j:123456jp@localhost:7687'
@@ -64,6 +66,11 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = ["http://localhost:5173",]
 
 CSRF_TRUSTED_ORIGINS = ["http://localhost:5173",]
+
+# NOVO: Autoriza o cabeçalho customizado da Família para o Frontend
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    "x-familia-uuid",
+]
 
 # Garante que o cookie funcione em HTTP (localhost)
 SESSION_COOKIE_SECURE = False

@@ -16,8 +16,14 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from core import views  # NOVO: Importação necessária para as rotas da API
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('core.urls')),
+
+    # Novas rotas de Família
+    path('api/familias/criar/', views.api_criar_familia, name='api_criar_familia'),
+    path('api/familias/resgatar/', views.api_resgatar_dados_antigos,
+         name='api_resgatar_dados_antigos'),
 ]

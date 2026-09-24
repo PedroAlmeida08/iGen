@@ -1,63 +1,93 @@
-from neomodel import db
-from core.models import Pessoa, Evento
 import os
 import django
 from datetime import date
 
-# Configura o ambiente do Django para que o script reconheça os modelos
+# 1. SETUP INICIAL DO DJANGO
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
 
 def popular_banco():
-    print("🧹 Limpando o banco de dados para um teste limpo...")
-    db.cypher_query("MATCH (n) DETACH DELETE n")
+    from core.models import Pessoa, Evento
 
-    print("🌳 Criando árvore genealógica de exemplo...")
+    print("Iniciando atualizações no banco de dados...")
 
-    # --- GERAÇÃO 1: Avós ---
-    joaquim = Pessoa(nomeCompleto="Joaquim Silva", sexo="M",
-                     dataNascimento=date(1950, 5, 10)).save()
-    maria = Pessoa(nomeCompleto="Maria Silva", sexo="F",
-                   dataNascimento=date(1953, 3, 15)).save()
-    joaquim.casado_com.connect(maria)
+    # ==========================================
+    # BUSCANDO OU CRIANDO OS PERSONAGENS
+    # (Usando get_or_none para evitar erros caso não existam)
+    # ==========================================
+    gui = Pessoa.nodes.get_or_none(nomeCompleto="William Arthur Weasley")
+    carlinhos = Pessoa.nodes.get_or_none(nomeCompleto="Charles Weasley")
+    percy = Pessoa.nodes.get_or_none(nomeCompleto="Percy Ignatius Weasley")
+    harry = Pessoa.nodes.get_or_none(nomeCompleto="Harry James Potter")
+    arthur = Pessoa.nodes.get_or_none(nomeCompleto="Arthur Weasley")
+    molly = Pessoa.nodes.get_or_none(nomeCompleto="Molly Weasley")
 
-    # --- GERAÇÃO 2: Pais ---
-    # Gilberto é filho de Joaquim e Maria
-    gilberto = Pessoa(nomeCompleto="Gilberto Silva", sexo="M",
-                      dataNascimento=date(1981, 9, 27)).save()
-    joaquim.pai_de.connect(gilberto)
-    maria.mae_de.connect(gilberto)
+    fleur = Pessoa.nodes.get_or_none(nomeCompleto="Fleur Isabelle Delacour")
+    if not fleur:
+        fleur = Pessoa(nomeCompleto="Fleur Isabelle Delacour", apelido="Fleur",
+                       dataNascimento=date(1977, 10, 30), criado_por_nome="admin").save()
 
-    # Fran (esposa do Gilberto)
-    fran = Pessoa(nomeCompleto="Fran Silva", sexo="F",
-                  dataNascimento=date(1982, 8, 24)).save()
-    gilberto.casado_com.connect(fran)
+    gabrielle = Pessoa.nodes.get_or_none(nomeCompleto="Gabrielle Delacour")
+    if not gabrielle:
+        gabrielle = Pessoa(nomeCompleto="Gabrielle Delacour", apelido="Gabrielle",
+                           dataNascimento=date(1986, 1, 1), criado_por_nome="admin").save()
 
-    # --- GERAÇÃO 3: Filhos ---
-    # João e Julia são filhos de Gilberto e Fran
-    joao = Pessoa(nomeCompleto="João Silva", apelido="jp",
-                  sexo="M", dataNascimento=date(1999, 8, 2)).save()
-    julia = Pessoa(nomeCompleto="Julia de Almeida dos Santos",
-                   apelido="Ju", sexo="F", dataNascimento=date(2010, 6, 11)).save()
+    # Conecta as irmãs Delacour
+    if fleur and gabrielle and not fleur.irmao_de.is_connected(gabrielle):
+        fleur.irmao_de.connect(gabrielle)
+        gabrielle.irmao_de.connect(fleur)
 
-    gilberto.pai_de.connect(joao)
-    gilberto.pai_de.connect(julia)
-    fran.mae_de.connect(joao)
-    fran.mae_de.connect(julia)
+    # ==========================================
+    # REGISTRANDO O CASAMENTO (GUI E FLEUR)
+    # ==========================================
+    if gui and fleur and not gui.casado_com.is_connected(fleur):
+        gui.casado_com.connect(fleur)
+        print("💍 Casamento entre Gui e Fleur registrado com sucesso!")
 
-    # --- EVENTO ---
-    natal = Evento(tipo="Natal em Família", data=date(
-        2025, 12, 25), local="Casa do Joaquim").save()
-    joao.participou.connect(natal)
-    julia.participou.connect(natal)
-    gilberto.participou.connect(natal)
+    # ==========================================
+    # ADICIONANDO E CONECTANDO OS EVENTOS
+    # ==========================================
+    # Torneio Tribruxo
+    tribruxo = Evento.nodes.get_or_none(tipo="Torneio Tribruxo")
+    if not tribruxo:
+        tribruxo = Evento(tipo="Torneio Tribruxo", data=date(1994, 10, 31), local="Castelo de Hogwarts",
+                          descricao="Competição mágica lendária entre três escolas.").save()
 
-    print("\n✅ Sucesso! Família criada:")
-    print(f"- Joaquim & Maria (Avós)")
-    print(f"- Gilberto & Fran (Pais)")
-    print(f"- João & Julia (Filhos)")
+    for p in [fleur, harry, gabrielle]:
+        if p and not p.participou.is_connected(tribruxo):
+            p.participou.connect(tribruxo)
+
+    # O Evento do Casamento na Toca
+    casamento_evento = Evento.nodes.get_or_none(
+        tipo="Casamento de Gui e Fleur")
+    if not casamento_evento:
+        casamento_evento = Evento(tipo="Casamento de Gui e Fleur", data=date(
+            1997, 8, 1), local="A Toca", descricao="Cerimônia interrompida pela queda do Ministério da Magia.").save()
+
+    participantes_casamento = [gui, fleur, gabrielle,
+                               arthur, molly, carlinhos, percy, harry]
+    for p in participantes_casamento:
+        if p and not p.participou.is_connected(casamento_evento):
+            p.participou.connect(casamento_evento)
+
+    # ==========================================
+    # CONECTANDO A EVENTOS ANTIGOS
+    # ==========================================
+    batalha_hogwarts = Evento.nodes.get_or_none(tipo="A Batalha de Hogwarts")
+    if batalha_hogwarts:
+        for p in [gui, fleur, percy]:
+            if p and not p.participou.is_connected(batalha_hogwarts):
+                p.participou.connect(batalha_hogwarts)
+
+    batalha_7_potter = Evento.nodes.get_or_none(tipo="A Batalha dos 7 Potter")
+    if batalha_7_potter:
+        for p in [gui, fleur]:
+            if p and not p.participou.is_connected(batalha_7_potter):
+                p.participou.connect(batalha_7_potter)
+
+    print("✅ Script executado com sucesso! Todos os eventos e laços foram atualizados no banco de dados.")
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     popular_banco()

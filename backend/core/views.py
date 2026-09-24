@@ -1,23 +1,52 @@
 import json
-import uuid as uuid_lib  # Para gerar IDs únicos manualmente se necessário
+import uuid as uuid_lib
 from datetime import datetime
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login, logout
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse, HttpResponseBadRequest, HttpResponseForbidden, HttpResponseNotFound
 from neomodel import db
-from .models import Pessoa, Evento, Comentario, RegistroAtividade, Solicitacao
 
+# Importação dos modelos originais e dos novos modelos de Família
+from .models import (
+    Pessoa, Evento, Comentario, RegistroAtividade, Solicitacao,
+    FamiliaWorkspace, MembroFamilia, FamiliaNode
+)
 
 # ==========================================
-# FUNÇÃO AUXILIAR DE LOGS (Auditoria)
+# FUNÇÕES AUXILIARES (Autenticação e Logs)
 # ==========================================
-def registrar_log(usuario, acao, entidade, detalhes):
-    """Salva uma ação no banco relacional (SQLite)"""
+
+
+def obter_contexto_familia(request):
+    """
+    Valida a sessão e verifica se o utilizador tem acesso à família especificada.
+    Retorna: FamiliaWorkspace (DB Relacional), FamiliaNode (Grafo), MembroFamilia, Erro
+    """
+    if not request.user.is_authenticated:
+        return None, None, None, HttpResponseForbidden("Login necessário.")
+
+    familia_uuid = request.headers.get('X-Familia-UUID')
+    if not familia_uuid:
+        return None, None, None, HttpResponseBadRequest("Cabeçalho X-Familia-UUID é obrigatório.")
+
+    try:
+        familia_ws = FamiliaWorkspace.objects.get(uuid_referencia=familia_uuid)
+        membro = MembroFamilia.objects.get(
+            usuario=request.user, familia=familia_ws)
+        familia_node = FamiliaNode.nodes.get(uuid=familia_uuid)
+        return familia_ws, familia_node, membro, None
+    except (FamiliaWorkspace.DoesNotExist, MembroFamilia.DoesNotExist, FamiliaNode.DoesNotExist):
+        return None, None, None, HttpResponseForbidden("Acesso negado a este ambiente familiar.")
+
+
+def registrar_log(usuario, familia_ws, acao, entidade, detalhes):
+    """Guarda uma ação no histórico isolado da família."""
     nome_usuario = usuario.username if hasattr(
         usuario, 'username') else str(usuario)
     RegistroAtividade.objects.create(
-        usuario=nome_usuario,
+        usuario=usuario,
+        familia=familia_ws,
         acao=acao,
         entidade=entidade,
         detalhes=detalhes
@@ -38,13 +67,13 @@ def api_registrar_usuario(request):
             email = dados.get('email', '')
 
             if User.objects.filter(username=username).exists():
-                return HttpResponseBadRequest("Nome de usuário já existe.")
+                return HttpResponseBadRequest("Nome de utilizador já existe.")
 
             User.objects.create_user(
                 username=username, password=password, email=email)
-            return JsonResponse({'message': 'Usuário criado com sucesso!'})
+            return JsonResponse({'message': 'Utilizador criado com sucesso!'})
         except Exception as e:
-            return HttpResponseBadRequest(f"Erro ao registrar: {str(e)}")
+            return HttpResponseBadRequest(f"Erro ao registar: {str(e)}")
 
 
 @csrf_exempt
@@ -56,13 +85,13 @@ def api_login(request):
 
         user = authenticate(request, username=username, password=password)
         if user is not None:
-            login(request, user)  # Cria o Cookie de Sessão
+            login(request, user)
             return JsonResponse({
-                'message': 'Login realizado!',
-                'user': {'id': user.id, 'username': user.username, 'is_admin': user.is_superuser}
+                'message': 'Login realizado com sucesso!',
+                'user': {'id': user.id, 'username': user.username}
             })
         else:
-            return JsonResponse({'message': 'Usuário ou senha incorretos.'}, status=401)
+            return JsonResponse({'message': 'Utilizador ou palavra-passe incorretos.'}, status=401)
 
 
 @csrf_exempt
@@ -72,32 +101,47 @@ def api_logout(request):
 
 
 def api_check_auth(request):
-    """Verifica se o cookie de sessão ainda é válido"""
+    """Verifica a sessão e devolve a lista de famílias a que o utilizador tem acesso"""
     if request.user.is_authenticated:
+        familias = MembroFamilia.objects.filter(
+            usuario=request.user).select_related('familia')
+        lista_familias = [{
+            'nome': f.familia.nome,
+            'uuid': f.familia.uuid_referencia,
+            'funcao': f.funcao
+        } for f in familias]
+
         return JsonResponse({
             'is_logged_in': True,
-            'user': {
-                'id': request.user.id,
-                'username': request.user.username,
-                'is_admin': request.user.is_superuser
-            }
+            'user': {'id': request.user.id, 'username': request.user.username},
+            'familias': lista_familias
         })
     return JsonResponse({'is_logged_in': False})
 
 
 # ==========================================
-# 2. API DO GRAFO (Visualização Geral)
+# 2. API DO GRAFO (Isolada por Família)
 # ==========================================
 
 def api_grafo(request):
+    familia_ws, familia_node, membro, erro = obter_contexto_familia(request)
+    if erro:
+        return erro
+
     nodes = []
     edges = []
 
-    pessoas = Pessoa.nodes.all()
-    eventos = Evento.nodes.all()
+    # Busca APENAS Pessoas e Eventos que pertencem a esta Família
+    query_pessoas = "MATCH (p:Pessoa)-[:PERTENCE_A]->(f:FamiliaNode {uuid: $uuid}) RETURN p"
+    res_pessoas, _ = db.cypher_query(
+        query_pessoas, {'uuid': familia_node.uuid})
 
-    # Nós de Pessoas
-    for p in pessoas:
+    query_eventos = "MATCH (e:Evento)-[:PERTENCE_A]->(f:FamiliaNode {uuid: $uuid}) RETURN e"
+    res_eventos, _ = db.cypher_query(
+        query_eventos, {'uuid': familia_node.uuid})
+
+    for row in res_pessoas:
+        p = Pessoa.inflate(row[0])
         nodes.append({
             'id': p.uuid,
             'label': p.nomeCompleto,
@@ -105,7 +149,6 @@ def api_grafo(request):
             'apelido': p.apelido,
         })
 
-        # Arestas (Relacionamentos)
         for filho in p.pai_de.all():
             edges.append({'from': p.uuid, 'to': filho.uuid, 'label': 'PAI'})
         for filho in p.mae_de.all():
@@ -115,42 +158,41 @@ def api_grafo(request):
                 {'from': p.uuid, 'to': conjuge.uuid, 'label': 'CASADO'})
         for evento in p.participou.all():
             edges.append({'from': p.uuid, 'to': evento.uuid, 'label': 'FOI'})
-
-        # NOVO: Renderiza a linha de Irmão na Árvore Genealógica
         for irmao in p.irmao_de.all():
-            # Como a relação de irmão é dupla, evitamos desenhar duas setas iguais
-            # verificando se a aresta inversa já não existe na lista.
             if not any(e['from'] == irmao.uuid and e['to'] == p.uuid and e['label'] == 'IRMAO' for e in edges):
                 edges.append(
                     {'from': p.uuid, 'to': irmao.uuid, 'label': 'IRMAO'})
 
-    # Nós de Eventos
-    for e in eventos:
+    for row in res_eventos:
+        e = Evento.inflate(row[0])
         nodes.append({'id': e.uuid, 'label': e.tipo, 'group': 'evento'})
 
     return JsonResponse({'nodes': nodes, 'edges': edges})
 
 
 # ==========================================
-# 3. API DE PESSOAS (CRUD + Auditoria)
+# 3. API DE PESSOAS (CRUD + Auditoria Isolada)
 # ==========================================
 
 @csrf_exempt
 def api_listar_pessoas(request):
+    familia_ws, familia_node, membro, erro = obter_contexto_familia(request)
+    if erro:
+        return erro
+
     if request.method == 'GET':
-        pessoas = Pessoa.nodes.all()
-        data = [{'uuid': p.uuid, 'nome': p.nomeCompleto,
-                 'apelido': p.apelido} for p in pessoas]
+        query = "MATCH (p:Pessoa)-[:PERTENCE_A]->(f:FamiliaNode {uuid: $uuid}) RETURN p"
+        resultados, _ = db.cypher_query(query, {'uuid': familia_node.uuid})
+        data = [{'uuid': row[0]['uuid'], 'nome': row[0]['nomeCompleto'],
+                 'apelido': row[0].get('apelido', '')} for row in resultados]
         return JsonResponse(data, safe=False)
 
     elif request.method == 'POST':
-        if not request.user.is_authenticated:
-            return HttpResponseForbidden("Você precisa estar logado para cadastrar.")
+        if membro.funcao == 'LEITOR':
+            return HttpResponseForbidden("Leitores não podem registar novas pessoas.")
 
         try:
             dados = json.loads(request.body)
-
-            # 1. TRATAMENTO DA DATA DE NASCIMENTO
             data_str = dados.get('dataNascimento')
             data_nasc_obj = None
             if data_str:
@@ -158,9 +200,9 @@ def api_listar_pessoas(request):
                     data_nasc_obj = datetime.strptime(
                         data_str, '%Y-%m-%d').date()
                 except ValueError:
-                    return HttpResponseBadRequest("Data nascimento inválida.")
+                    return HttpResponseBadRequest("Data de nascimento inválida.")
 
-            # 2. CRIA A PESSOA
+            # Cria a pessoa
             nova_pessoa = Pessoa(
                 nomeCompleto=dados.get('nomeCompleto'),
                 apelido=dados.get('apelido'),
@@ -170,11 +212,13 @@ def api_listar_pessoas(request):
                 criado_em=datetime.now().isoformat()
             ).save()
 
-            # --- LOG DE CRIAÇÃO ---
-            registrar_log(request.user, "Criou", "Pessoa",
-                          f"Cadastrou: {nova_pessoa.nomeCompleto}")
+            # VÍNCULO OBRIGATÓRIO DE PRIVACIDADE
+            nova_pessoa.pertence_a.connect(familia_node)
 
-            # 3. AUTOMAÇÃO: EVENTO DE NASCIMENTO
+            registrar_log(request.user, familia_ws, "Criou",
+                          "Pessoa", f"Cadastrou: {nova_pessoa.nomeCompleto}")
+
+            # AUTOMAÇÃO: EVENTO DE NASCIMENTO
             if data_nasc_obj:
                 evento_nasc = Evento(
                     tipo='Nascimento',
@@ -182,52 +226,69 @@ def api_listar_pessoas(request):
                     descricao=f"Nascimento de {nova_pessoa.nomeCompleto}",
                     local="Local de Nascimento"
                 ).save()
+                evento_nasc.pertence_a.connect(familia_node)
                 nova_pessoa.participou.connect(evento_nasc)
 
-            # 4. AUTOMAÇÃO: PAIS
+            # AUTOMAÇÃO: PAIS E CASAMENTOS (Apenas liga se os originais pertencerem à família)
             uuid_pai = dados.get('pai_uuid')
             if uuid_pai:
-                pai = Pessoa.nodes.get(uuid=uuid_pai)
-                pai.pai_de.connect(nova_pessoa)
+                try:
+                    pai = Pessoa.nodes.get(uuid=uuid_pai)
+                    if pai.pertence_a.is_connected(familia_node):
+                        pai.pai_de.connect(nova_pessoa)
+                except Pessoa.DoesNotExist:
+                    pass
 
             uuid_mae = dados.get('mae_uuid')
             if uuid_mae:
-                mae = Pessoa.nodes.get(uuid=uuid_mae)
-                mae.mae_de.connect(nova_pessoa)
+                try:
+                    mae = Pessoa.nodes.get(uuid=uuid_mae)
+                    if mae.pertence_a.is_connected(familia_node):
+                        mae.mae_de.connect(nova_pessoa)
+                except Pessoa.DoesNotExist:
+                    pass
 
-            # 5. AUTOMAÇÃO: CASAMENTO
             uuid_conjuge = dados.get('conjuge_uuid')
             if uuid_conjuge:
-                conjuge = Pessoa.nodes.get(uuid=uuid_conjuge)
-                nova_pessoa.casado_com.connect(conjuge)
+                try:
+                    conjuge = Pessoa.nodes.get(uuid=uuid_conjuge)
+                    if conjuge.pertence_a.is_connected(familia_node):
+                        nova_pessoa.casado_com.connect(conjuge)
 
-                data_casamento_str = dados.get('dataCasamento')
-                if data_casamento_str:
-                    try:
-                        dt_casamento = datetime.strptime(
-                            data_casamento_str, '%Y-%m-%d').date()
-                        evento_casamento = Evento(
-                            tipo='Casamento',
-                            data=dt_casamento,
-                            descricao=f"Casamento de {nova_pessoa.nomeCompleto} e {conjuge.nomeCompleto}"
-                        ).save()
-                        nova_pessoa.participou.connect(evento_casamento)
-                        conjuge.participou.connect(evento_casamento)
-                    except ValueError:
-                        pass
+                        dt_cas_str = dados.get('dataCasamento')
+                        if dt_cas_str:
+                            try:
+                                dt_cas = datetime.strptime(
+                                    dt_cas_str, '%Y-%m-%d').date()
+                                ev_cas = Evento(
+                                    tipo='Casamento', data=dt_cas,
+                                    descricao=f"Casamento de {nova_pessoa.nomeCompleto} e {conjuge.nomeCompleto}"
+                                ).save()
+                                ev_cas.pertence_a.connect(familia_node)
+                                nova_pessoa.participou.connect(ev_cas)
+                                conjuge.participou.connect(ev_cas)
+                            except ValueError:
+                                pass
+                except Pessoa.DoesNotExist:
+                    pass
 
-            return JsonResponse({'message': 'Pessoa e eventos automáticos criados!', 'uuid': nova_pessoa.uuid}, status=201)
-
+            return JsonResponse({'message': 'Registo e automações criados com sucesso!', 'uuid': nova_pessoa.uuid}, status=201)
         except Exception as e:
             return HttpResponseBadRequest(f"Erro ao processar: {str(e)}")
 
 
 @csrf_exempt
 def api_detalhe_pessoa(request, uuid):
+    familia_ws, familia_node, membro, erro = obter_contexto_familia(request)
+    if erro:
+        return erro
+
     try:
         pessoa = Pessoa.nodes.get(uuid=uuid)
+        if not pessoa.pertence_a.is_connected(familia_node):
+            return HttpResponseForbidden("Esta pessoa não pertence à sua família.")
     except Pessoa.DoesNotExist:
-        return HttpResponseNotFound("Pessoa não encontrada")
+        return HttpResponseNotFound("Pessoa não encontrada.")
 
     if request.method == 'GET':
         eventos_participados = []
@@ -249,22 +310,18 @@ def api_detalhe_pessoa(request, uuid):
         })
 
     elif request.method == 'DELETE':
-        # BLOQUEIO DE ADMIN
-        if not request.user.is_authenticated or not request.user.is_superuser:
-            return HttpResponseForbidden("Apenas administradores podem excluir.")
+        if membro.funcao != 'ADMIN':
+            return HttpResponseForbidden("Apenas administradores da família podem excluir registos.")
 
         nome_pessoa = pessoa.nomeCompleto
         pessoa.delete()
-
-        # GERA O LOG
-        registrar_log(request.user, "Excluiu", "Pessoa",
-                      f"Apagou permanentemente a pessoa: {nome_pessoa}")
-        return JsonResponse({'message': 'Registro excluído.'})
+        registrar_log(request.user, familia_ws, "Excluiu",
+                      "Pessoa", f"Apagou permanentemente: {nome_pessoa}")
+        return JsonResponse({'message': 'Registo excluído com sucesso.'})
 
     elif request.method == 'PUT':
-        # BLOQUEIO DE ADMIN
-        if not request.user.is_authenticated or not request.user.is_superuser:
-            return HttpResponseForbidden("Apenas administradores podem editar.")
+        if membro.funcao != 'ADMIN':
+            return HttpResponseForbidden("Apenas administradores da família podem editar registos.")
 
         dados = json.loads(request.body)
         nome_antigo = pessoa.nomeCompleto
@@ -273,10 +330,9 @@ def api_detalhe_pessoa(request, uuid):
         pessoa.apelido = dados.get('apelido', pessoa.apelido)
         pessoa.save()
 
-        # GERA O LOG
-        registrar_log(request.user, "Editou", "Pessoa",
-                      f"Alterou dados de: {nome_antigo}")
-        return JsonResponse({'message': 'Dados atualizados!'})
+        registrar_log(request.user, familia_ws, "Editou",
+                      "Pessoa", f"Alterou dados de: {nome_antigo}")
+        return JsonResponse({'message': 'Dados atualizados com sucesso!'})
 
 
 # ==========================================
@@ -285,16 +341,21 @@ def api_detalhe_pessoa(request, uuid):
 
 @csrf_exempt
 def api_adicionar_comentario(request, uuid):
+    familia_ws, familia_node, membro, erro = obter_contexto_familia(request)
+    if erro:
+        return erro
+
     if request.method == 'POST':
-        if not request.user.is_authenticated:
-            return HttpResponseForbidden("Logue para comentar.")
+        if membro.funcao == 'LEITOR':
+            return HttpResponseForbidden("Leitores não podem efetuar comentários.")
 
         try:
             dados = json.loads(request.body)
             texto = dados.get('texto')
 
+            # O cypher_query garante que o comentário é criado e ligado tanto à Pessoa quanto à Família
             query = """
-            MATCH (p:Pessoa {uuid: $uuid_pessoa})
+            MATCH (p:Pessoa {uuid: $uuid_pessoa})-[:PERTENCE_A]->(f:FamiliaNode {uuid: $uuid_familia})
             CREATE (c:Comentario {
                 texto: $texto,
                 autor: $autor,
@@ -302,10 +363,12 @@ def api_adicionar_comentario(request, uuid):
                 uuid: $uuid_comentario
             })
             CREATE (c)-[:SOBRE]->(p)
+            CREATE (c)-[:PERTENCE_A]->(f)
             """
 
             db.cypher_query(query, {
                 'uuid_pessoa': uuid,
+                'uuid_familia': familia_node.uuid,
                 'uuid_comentario': str(uuid_lib.uuid4()),
                 'texto': texto,
                 'autor': request.user.username,
@@ -323,39 +386,47 @@ def api_adicionar_comentario(request, uuid):
 
 @csrf_exempt
 def api_listar_eventos(request):
+    familia_ws, familia_node, membro, erro = obter_contexto_familia(request)
+    if erro:
+        return erro
+
     if request.method == 'GET':
-        eventos = Evento.nodes.order_by('data')
+        query = """
+        MATCH (e:Evento)-[:PERTENCE_A]->(f:FamiliaNode {uuid: $uuid_familia})
+        OPTIONAL MATCH (p:Pessoa)-[]->(e)
+        RETURN e, collect(p) as participantes
+        ORDER BY e.data
+        """
+        results, _ = db.cypher_query(
+            query, {'uuid_familia': familia_node.uuid})
+
         data = []
-        for e in eventos:
-            # Busca os participantes deste evento específico
-            query = """
-            MATCH (p:Pessoa)-[]->(e:Evento {uuid: $uuid})
-            RETURN p
-            """
-            results, meta = db.cypher_query(query, {'uuid': e.uuid})
+        for row in results:
+            node_evento = row[0]
+            participantes_nodes = row[1]
 
             participantes = []
-            for row in results:
-                node_pessoa = row[0]
-                participantes.append({
-                    'uuid': node_pessoa.get('uuid'),
-                    'nome': node_pessoa.get('nomeCompleto'),
-                    'apelido': node_pessoa.get('apelido', '')
-                })
+            for p in participantes_nodes:
+                if p:
+                    participantes.append({
+                        'uuid': p.get('uuid'),
+                        'nome': p.get('nomeCompleto'),
+                        'apelido': p.get('apelido', '')
+                    })
 
             data.append({
-                'uuid': e.uuid,
-                'tipo': e.tipo,
-                'data': str(e.data) if e.data else "Data desc.",
-                'local': getattr(e, 'local', ''),
-                'descricao': getattr(e, 'descricao', ''),
+                'uuid': node_evento.get('uuid'),
+                'tipo': node_evento.get('tipo'),
+                'data': node_evento.get('data') if node_evento.get('data') else "Data desc.",
+                'local': node_evento.get('local', ''),
+                'descricao': node_evento.get('descricao', ''),
                 'participantes': participantes
             })
         return JsonResponse(data, safe=False)
 
     elif request.method == 'POST':
-        if not request.user.is_authenticated:
-            return HttpResponseForbidden("Login necessário.")
+        if membro.funcao == 'LEITOR':
+            return HttpResponseForbidden("Leitores não podem registar novos eventos.")
 
         try:
             dados = json.loads(request.body)
@@ -376,35 +447,35 @@ def api_listar_eventos(request):
                 descricao=dados.get('descricao')
             ).save()
 
-            registrar_log(request.user, "Criou", "Evento",
-                          f"Registrou o evento: {novo_evento.tipo}")
-            return JsonResponse({'message': 'Evento criado!', 'uuid': novo_evento.uuid}, status=201)
+            # VÍNCULO OBRIGATÓRIO DE PRIVACIDADE
+            novo_evento.pertence_a.connect(familia_node)
 
+            registrar_log(request.user, familia_ws, "Criou",
+                          "Evento", f"Registou o evento: {novo_evento.tipo}")
+            return JsonResponse({'message': 'Evento criado com sucesso!', 'uuid': novo_evento.uuid}, status=201)
         except Exception as e:
             return HttpResponseBadRequest(f"Erro ao criar evento: {str(e)}")
 
 
 @csrf_exempt
 def api_detalhe_evento(request, uuid):
+    familia_ws, familia_node, membro, erro = obter_contexto_familia(request)
+    if erro:
+        return erro
+
     try:
         evento = Evento.nodes.get(uuid=uuid)
+        if not evento.pertence_a.is_connected(familia_node):
+            return HttpResponseForbidden("Este evento não pertence à sua família.")
     except Evento.DoesNotExist:
-        return HttpResponseNotFound("Evento não encontrado")
+        return HttpResponseNotFound("Evento não encontrado.")
 
     if request.method == 'GET':
-        query = """
-        MATCH (p:Pessoa)-[]->(e:Evento {uuid: $uuid})
-        RETURN p
-        """
-        results, meta = db.cypher_query(query, {'uuid': uuid})
+        query = "MATCH (p:Pessoa)-[]->(e:Evento {uuid: $uuid}) RETURN p"
+        results, _ = db.cypher_query(query, {'uuid': uuid})
 
-        participantes = []
-        for row in results:
-            node_pessoa = row[0]
-            participantes.append({
-                'uuid': node_pessoa.get('uuid'),
-                'nome': node_pessoa.get('nomeCompleto')
-            })
+        participantes = [{'uuid': row[0].get('uuid'), 'nome': row[0].get(
+            'nomeCompleto')} for row in results]
 
         return JsonResponse({
             'uuid': evento.uuid,
@@ -416,21 +487,18 @@ def api_detalhe_evento(request, uuid):
         })
 
     elif request.method == 'DELETE':
-        # BLOQUEIO DE ADMIN
-        if not request.user.is_authenticated or not request.user.is_superuser:
-            return HttpResponseForbidden("Apenas administradores podem excluir eventos.")
+        if membro.funcao != 'ADMIN':
+            return HttpResponseForbidden("Apenas administradores da família podem excluir eventos.")
 
         tipo_evento = evento.tipo
         evento.delete()
-
-        registrar_log(request.user, "Excluiu", "Evento",
+        registrar_log(request.user, familia_ws, "Excluiu", "Evento",
                       f"Apagou permanentemente o evento: {tipo_evento}")
-        return JsonResponse({'message': 'Evento excluído.'})
+        return JsonResponse({'message': 'Evento excluído com sucesso.'})
 
     elif request.method == 'PUT':
-        # BLOQUEIO DE ADMIN
-        if not request.user.is_authenticated or not request.user.is_superuser:
-            return HttpResponseForbidden("Apenas administradores podem editar eventos.")
+        if membro.funcao != 'ADMIN':
+            return HttpResponseForbidden("Apenas administradores da família podem editar eventos.")
 
         dados = json.loads(request.body)
         tipo_antigo = evento.tipo
@@ -440,9 +508,9 @@ def api_detalhe_evento(request, uuid):
         evento.descricao = dados.get('descricao', evento.descricao)
         evento.save()
 
-        registrar_log(request.user, "Editou", "Evento",
+        registrar_log(request.user, familia_ws, "Editou", "Evento",
                       f"Alterou dados do evento: {tipo_antigo}")
-        return JsonResponse({'message': 'Evento atualizado!'})
+        return JsonResponse({'message': 'Evento atualizado com sucesso!'})
 
 
 # ==========================================
@@ -451,24 +519,37 @@ def api_detalhe_evento(request, uuid):
 
 @csrf_exempt
 def api_criar_relacionamento(request):
+    familia_ws, familia_node, membro, erro = obter_contexto_familia(request)
+    if erro:
+        return erro
+
     if request.method == 'POST':
-        if not request.user.is_authenticated:
-            return HttpResponseForbidden("Login necessário.")
+        if membro.funcao == 'LEITOR':
+            return HttpResponseForbidden("Leitores não podem alterar a estrutura da árvore.")
 
         try:
             dados = json.loads(request.body)
             origem = Pessoa.nodes.get(uuid=dados['origem_uuid'])
             tipo = dados['tipo']
 
+            if not origem.pertence_a.is_connected(familia_node):
+                return HttpResponseForbidden("O nó de origem não pertence à sua família.")
+
             if tipo == 'FOI':
                 destino = Evento.nodes.get(uuid=dados['destino_uuid'])
+                if not destino.pertence_a.is_connected(familia_node):
+                    return HttpResponseForbidden("O evento não pertence à sua família.")
+
                 origem.participou.connect(destino)
-                registrar_log(request.user, "Criou Laço", "Relacionamento",
+                registrar_log(request.user, familia_ws, "Criou Laço", "Relacionamento",
                               f"Conectou {origem.nomeCompleto} ao evento {destino.tipo}")
                 return JsonResponse({'message': 'Presença confirmada!'})
 
             else:
                 destino = Pessoa.nodes.get(uuid=dados['destino_uuid'])
+                if not destino.pertence_a.is_connected(familia_node):
+                    return HttpResponseForbidden("A pessoa de destino não pertence à sua família.")
+
                 if tipo == 'PAI':
                     origem.pai_de.connect(destino)
                 elif tipo == 'MAE':
@@ -479,16 +560,16 @@ def api_criar_relacionamento(request):
                     origem.irmao_de.connect(destino)
                     destino.irmao_de.connect(origem)
                 else:
-                    return HttpResponseBadRequest("Tipo inválido")
+                    return HttpResponseBadRequest("Tipo de relacionamento inválido.")
 
-                registrar_log(request.user, "Criou Laço", "Relacionamento",
+                registrar_log(request.user, familia_ws, "Criou Laço", "Relacionamento",
                               f"Conectou {origem.nomeCompleto} como {tipo} de {destino.nomeCompleto}")
-                return JsonResponse({'message': f'Relacionamento {tipo} criado!'})
+                return JsonResponse({'message': f'Relacionamento {tipo} criado com sucesso!'})
 
         except Exception as e:
             return HttpResponseBadRequest(f"Erro ao conectar: {str(e)}")
 
-    return HttpResponseBadRequest("Método não permitido")
+    return HttpResponseBadRequest("Método não permitido.")
 
 
 # ==========================================
@@ -497,13 +578,18 @@ def api_criar_relacionamento(request):
 
 @csrf_exempt
 def api_listar_logs(request):
-    if not request.user.is_authenticated or not request.user.is_superuser:
-        return HttpResponseForbidden("Acesso negado. Apenas administradores.")
+    familia_ws, _, membro, erro = obter_contexto_familia(request)
+    if erro:
+        return erro
 
-    logs = RegistroAtividade.objects.all()[:100]  # Pega os 100 mais recentes
+    if membro.funcao != 'ADMIN':
+        return HttpResponseForbidden("Acesso negado. Apenas administradores da família.")
+
+    logs = RegistroAtividade.objects.filter(
+        familia=familia_ws).order_by('-data_hora')[:100]
     data = [{
         'id': log.id,
-        'usuario': log.usuario,
+        'usuario': log.usuario.username if log.usuario else 'Sistema',
         'acao': log.acao,
         'entidade': log.entidade,
         'detalhes': log.detalhes,
@@ -512,36 +598,45 @@ def api_listar_logs(request):
 
     return JsonResponse(data, safe=False)
 
+
 # ==========================================
 # 8. API DE SOLICITAÇÕES (Workflow de Aprovação)
 # ==========================================
 
-
 @csrf_exempt
 def api_solicitacoes(request):
-    # GET: Admin visualiza as pendentes
-    if request.method == 'GET':
-        if not request.user.is_authenticated or not request.user.is_superuser:
-            return HttpResponseForbidden("Apenas admins podem ver as solicitações.")
+    familia_ws, familia_node, membro, erro = obter_contexto_familia(request)
+    if erro:
+        return erro
 
-        solicitacoes = Solicitacao.objects.filter(status='PENDENTE').values()
-        # Converte para lista para enviar no JSON
-        data = list(solicitacoes)
-        for s in data:
-            s['data_solicitacao'] = s['data_solicitacao'].strftime(
-                "%d/%m/%Y - %H:%M")
+    if request.method == 'GET':
+        if membro.funcao != 'ADMIN':
+            return HttpResponseForbidden("Apenas administradores podem gerir as solicitações da família.")
+
+        solicitacoes = Solicitacao.objects.filter(
+            familia=familia_ws, status='PENDENTE')
+        data = [{
+            'id': s.id,
+            'usuario': s.usuario.username,
+            'tipo_acao': s.tipo_acao,
+            'entidade': s.entidade,
+            'uuid_entidade': s.uuid_entidade,
+            'motivo': s.motivo,
+            'dados_novos': json.loads(s.dados_novos) if s.dados_novos else {},
+            'data_solicitacao': s.data_solicitacao.strftime("%d/%m/%Y - %H:%M")
+        } for s in solicitacoes]
+
         return JsonResponse(data, safe=False)
 
-    # POST: Usuário comum cria uma solicitação
     elif request.method == 'POST':
-        if not request.user.is_authenticated:
-            return HttpResponseForbidden("Login necessário.")
+        if membro.funcao == 'ADMIN':
+            return HttpResponseBadRequest("Administradores podem alterar os dados diretamente sem solicitar.")
 
         try:
             dados = json.loads(request.body)
-            # Salva a solicitação no banco
             Solicitacao.objects.create(
-                usuario=request.user.username,
+                usuario=request.user,
+                familia=familia_ws,
                 tipo_acao=dados['tipo_acao'],
                 entidade=dados['entidade'],
                 uuid_entidade=dados['uuid_entidade'],
@@ -549,46 +644,47 @@ def api_solicitacoes(request):
                 dados_novos=json.dumps(dados.get('dados_novos', {}))
             )
 
-            registrar_log(request.user, "Solicitou",
+            registrar_log(request.user, familia_ws, "Solicitou",
                           dados['entidade'], f"Pediu para {dados['tipo_acao']} - Motivo: {dados['motivo']}")
-            return JsonResponse({'message': 'Solicitação enviada aos administradores!'})
+            return JsonResponse({'message': 'Solicitação enviada aos administradores da família!'})
         except Exception as e:
             return HttpResponseBadRequest(f"Erro ao solicitar: {str(e)}")
 
 
 @csrf_exempt
 def api_processar_solicitacao(request, id):
-    """Admin aprova ou nega uma solicitação"""
+    familia_ws, familia_node, membro, erro = obter_contexto_familia(request)
+    if erro:
+        return erro
+
     if request.method == 'PUT':
-        if not request.user.is_authenticated or not request.user.is_superuser:
-            return HttpResponseForbidden("Apenas admins.")
+        if membro.funcao != 'ADMIN':
+            return HttpResponseForbidden("Apenas administradores podem aprovar solicitações.")
 
         try:
             dados = json.loads(request.body)
-            acao_admin = dados.get('acao')  # 'APROVAR' ou 'NEGAR'
-            solicitacao = Solicitacao.objects.get(id=id)
+            acao_admin = dados.get('acao')
+            solicitacao = Solicitacao.objects.get(id=id, familia=familia_ws)
 
             if acao_admin == 'NEGAR':
                 solicitacao.status = 'NEGADA'
                 solicitacao.save()
-                registrar_log(request.user, "Negou", "Solicitação",
-                              f"Negou pedido de {solicitacao.usuario}")
+                registrar_log(request.user, familia_ws, "Negou", "Solicitação",
+                              f"Negou pedido de {solicitacao.usuario.username}")
                 return JsonResponse({'message': 'Solicitação negada.'})
 
             elif acao_admin == 'APROVAR':
-                # 1. Busca o nó correto no Neo4j
                 if solicitacao.entidade == 'Pessoa':
                     node = Pessoa.nodes.get(uuid=solicitacao.uuid_entidade)
                 else:
                     node = Evento.nodes.get(uuid=solicitacao.uuid_entidade)
 
-                # 2. Executa a Ação (Excluir ou Editar)
                 if solicitacao.tipo_acao == 'Excluir':
                     nome_registro = getattr(
-                        node, 'nomeCompleto', getattr(node, 'tipo', 'Registro'))
+                        node, 'nomeCompleto', getattr(node, 'tipo', 'Registo'))
                     node.delete()
-                    registrar_log(request.user, "Excluiu", solicitacao.entidade,
-                                  f"Excluiu {nome_registro} após aprovar solicitação")
+                    registrar_log(request.user, familia_ws, "Excluiu",
+                                  solicitacao.entidade, f"Excluiu {nome_registro} após aprovação")
 
                 elif solicitacao.tipo_acao == 'Editar':
                     novos_dados = json.loads(solicitacao.dados_novos)
@@ -602,13 +698,96 @@ def api_processar_solicitacao(request, id):
                         node.descricao = novos_dados.get(
                             'descricao', node.descricao)
                     node.save()
-                    registrar_log(request.user, "Editou", solicitacao.entidade,
-                                  f"Editou registro após aprovar solicitação")
+                    registrar_log(request.user, familia_ws, "Editou",
+                                  solicitacao.entidade, "Editou registo após aprovação")
 
-                # 3. Atualiza o status
                 solicitacao.status = 'APROVADA'
                 solicitacao.save()
-                return JsonResponse({'message': 'Solicitação aprovada e aplicada ao grafo.'})
+                return JsonResponse({'message': 'Solicitação aprovada e aplicada à árvore familiar.'})
 
         except Exception as e:
-            return HttpResponseBadRequest(f"Erro ao processar: {str(e)}")
+            return HttpResponseBadRequest(f"Erro ao processar a solicitação: {str(e)}")
+
+# ==========================================
+# 9. API DE GESTÃO DE FAMÍLIAS (Workspaces)
+# ==========================================
+
+
+@csrf_exempt
+def api_criar_familia(request):
+    """Cria um novo Workspace e define o criador como Administrador."""
+    if request.method == 'POST':
+        if not request.user.is_authenticated:
+            return HttpResponseForbidden("Login necessário para criar uma família.")
+
+        try:
+            dados = json.loads(request.body)
+            nome_familia = dados.get('nome')
+
+            if not nome_familia:
+                return HttpResponseBadRequest("O nome da família é obrigatório.")
+
+            novo_uuid = str(uuid_lib.uuid4())
+
+            # 1. Cria o ambiente no banco relacional (SQLite)
+            familia_ws = FamiliaWorkspace.objects.create(
+                nome=nome_familia,
+                uuid_referencia=novo_uuid
+            )
+
+            # 2. Cria o nó raiz de privacidade no Grafo (Neo4j)
+            FamiliaNode(
+                uuid=novo_uuid,
+                nome=nome_familia
+            ).save()
+
+            # 3. Dá poderes de Administrador ao utilizador que criou
+            MembroFamilia.objects.create(
+                usuario=request.user,
+                familia=familia_ws,
+                funcao='ADMIN'
+            )
+
+            registrar_log(request.user, familia_ws, "Criou",
+                          "Workspace", f"Fundou a família: {nome_familia}")
+
+            return JsonResponse({
+                'message': 'Família criada com sucesso!',
+                'uuid': novo_uuid,
+                'nome': nome_familia
+            }, status=201)
+
+        except Exception as e:
+            return HttpResponseBadRequest(f"Erro ao criar família: {str(e)}")
+
+    return HttpResponseBadRequest("Método não permitido.")
+
+
+@csrf_exempt
+def api_resgatar_dados_antigos(request):
+    """
+    Função de manutenção: Puxa todos os nós antigos do Neo4j (que não têm família)
+    para dentro da família atualmente selecionada.
+    """
+    familia_ws, familia_node, membro, erro = obter_contexto_familia(request)
+    if erro:
+        return erro
+
+    if request.method == 'POST':
+        if membro.funcao != 'ADMIN':
+            return HttpResponseForbidden("Apenas administradores podem importar dados.")
+
+        # Cypher: Procura Pessoas e Eventos que NÃO têm a relação PERTENCE_A e liga-os a esta família
+        query = """
+        MATCH (n) WHERE (n:Pessoa OR n:Evento) AND NOT (n)-[:PERTENCE_A]->(:FamiliaNode)
+        MATCH (f:FamiliaNode {uuid: $uuid})
+        CREATE (n)-[:PERTENCE_A]->(f)
+        RETURN count(n)
+        """
+        results, _ = db.cypher_query(query, {'uuid': familia_node.uuid})
+        registos_afetados = results[0][0]
+
+        registrar_log(request.user, familia_ws, "Importou", "Manutenção",
+                      f"Resgatou {registos_afetados} registos órfãos.")
+
+        return JsonResponse({'message': f'{registos_afetados} registos antigos foram integrados na sua família.'})
