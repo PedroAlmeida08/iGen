@@ -64,7 +64,7 @@ function Login({ setUser }) {
   const selecionarFamilia = (uuid) => {
     // Guarda o identificador do workspace para ser usado em todas as rotas do frontend
     localStorage.setItem('familiaAtiva', uuid);
-    navigate('/admin');
+    window.location.href = '/admin';
   };
 
   const handleCriarFamilia = async (e) => {

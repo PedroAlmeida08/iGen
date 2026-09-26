@@ -27,6 +27,13 @@ function Navbar({ user, setUser, familias }) { // NOVO: Recebe 'familias' do App
     window.location.reload(); // Recarrega a página para atualizar os dados com o novo filtro
   };
 
+  const familiaObj = familias?.find(f => f.uuid === familiaAtiva) || (familias && familias[0]);
+  const isAdmin = Boolean(
+    user?.is_superuser || 
+    user?.is_admin || 
+    (familiaObj && familiaObj.funcao === 'ADMIN')
+  );
+
   return (
     <nav className="navbar">
       <div className="navbar-logo">🧬 iGen</div>
@@ -38,7 +45,7 @@ function Navbar({ user, setUser, familias }) { // NOVO: Recebe 'familias' do App
         
         {user ? (
           <>
-            <li><NavLink to="/admin">Admin</NavLink></li>
+            <li><NavLink to="/admin">{isAdmin ? "Admin" : "Gestão"}</NavLink></li>
             
             {/* NOVO: Seletor de Famílias na Navbar */}
             {familias && familias.length > 0 && (
@@ -74,7 +81,7 @@ function Navbar({ user, setUser, familias }) { // NOVO: Recebe 'familias' do App
             </li>
           </>
         ) : (
-          <li><NavLink to="/login">Gestão</NavLink></li>
+          <li><NavLink to="/login">Entrar</NavLink></li>
         )}
 
         <li><NavLink to="/sobre">Sobre</NavLink></li>

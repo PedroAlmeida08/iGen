@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './Admin.css';
 
-function Admin({ user }) {
+function Admin({ user, familias }) {
   const [activeTab, setActiveTab] = useState('pessoa'); 
   const [msg, setMsg] = useState('');
 
@@ -27,6 +27,12 @@ function Admin({ user }) {
 
   const familiaAtiva = localStorage.getItem('familiaAtiva');
   const temFamilia = Boolean(familiaAtiva && familiaAtiva !== 'undefined' && familiaAtiva !== 'null');
+  const familiaObj = familias?.find(f => f.uuid === familiaAtiva) || (familias && familias[0]);
+  const isAdmin = Boolean(
+    user?.is_admin || 
+    user?.is_superuser || 
+    (familiaObj && familiaObj.funcao === 'ADMIN')
+  );
 
   const [refreshKey, setRefreshKey] = useState(0);
   const atualizarTabelas = () => setRefreshKey(prev => prev + 1);
@@ -56,7 +62,7 @@ function Admin({ user }) {
       .then(data => setListaEventos(Array.isArray(data) ? data : []))
       .catch(err => console.error("Erro Eventos:", err));
 
-    if (user && user.is_admin) {
+    if (isAdmin) {
       fetch('http://localhost:8000/api/logs/', { headers: headersJSON, credentials: 'include' })
         .then(res => res.ok ? res.json() : [])
         .then(data => setListaLogs(Array.isArray(data) ? data : []))
@@ -67,70 +73,106 @@ function Admin({ user }) {
         .then(data => setListaSolicitacoes(Array.isArray(data) ? data : []))
         .catch(err => console.error("Erro Admin Solicitações:", err));
     }
-  }, [refreshKey, temFamilia, familiaAtiva, user]);
+  }, [refreshKey, temFamilia, familiaAtiva, isAdmin]);
 
 
   const salvarPessoa = async (e) => {
     e.preventDefault();
-    try {
-      const res = await fetch('http://localhost:8000/api/pessoas/', {
-        method: 'POST', headers: getHeaders(), credentials: 'include',
-        body: JSON.stringify(formPessoa)
-      });
-      if(res.ok) {
-        setMsg("✅ Pessoa e eventos registrados!");
-        setFormPessoa({ nomeCompleto: '', apelido: '', dataNascimento: '', dataObito: '', pai_uuid: '', mae_uuid: '', conjuge_uuid: '', dataCasamento: '' });
-        atualizarTabelas();
-      } else { 
-        setMsg("❌ Erro ao salvar"); 
+    if (isAdmin) {
+      try {
+        const res = await fetch('http://localhost:8000/api/pessoas/', {
+          method: 'POST', headers: getHeaders(), credentials: 'include',
+          body: JSON.stringify(formPessoa)
+        });
+        if(res.ok) {
+          setMsg("✅ Pessoa e eventos registrados!");
+          setFormPessoa({ nomeCompleto: '', apelido: '', dataNascimento: '', dataObito: '', pai_uuid: '', mae_uuid: '', conjuge_uuid: '', dataCasamento: '' });
+          atualizarTabelas();
+        } else { 
+          const errData = await res.text();
+          setMsg(`❌ Erro ao salvar: ${errData}`); 
+        }
+      } catch(err) { 
+        console.error(err); 
+        setMsg("Erro de conexão."); 
       }
-    } catch(err) { 
-      console.error(err); 
-      setMsg("Erro de conexão."); 
+    } else {
+      setSolicitacaoAtual({
+        tipo_acao: 'Criar',
+        entidade: 'Pessoa',
+        uuid_entidade: '',
+        motivo: '',
+        dados_novos: formPessoa
+      });
+      setModalOpen(true);
     }
   };
 
   const salvarEvento = async (e) => {
     e.preventDefault();
-    try {
-      const res = await fetch('http://localhost:8000/api/eventos/', {
-        method: 'POST', headers: getHeaders(), credentials: 'include',
-        body: JSON.stringify(formEvento)
-      });
-      if(res.ok) {
-        setMsg("✅ Evento criado!");
-        setFormEvento({ tipo: '', data: '', local: '', descricao: '' });
-        atualizarTabelas();
-      } else { 
-        setMsg("❌ Erro ao criar evento."); 
+    if (isAdmin) {
+      try {
+        const res = await fetch('http://localhost:8000/api/eventos/', {
+          method: 'POST', headers: getHeaders(), credentials: 'include',
+          body: JSON.stringify(formEvento)
+        });
+        if(res.ok) {
+          setMsg("✅ Evento criado!");
+          setFormEvento({ tipo: '', data: '', local: '', descricao: '' });
+          atualizarTabelas();
+        } else { 
+          const errData = await res.text();
+          setMsg(`❌ Erro ao criar evento: ${errData}`); 
+        }
+      } catch(err) { 
+        console.error(err); 
+        setMsg("Erro de conexão."); 
       }
-    } catch(err) { 
-      console.error(err); 
-      setMsg("Erro de conexão."); 
+    } else {
+      setSolicitacaoAtual({
+        tipo_acao: 'Criar',
+        entidade: 'Evento',
+        uuid_entidade: '',
+        motivo: '',
+        dados_novos: formEvento
+      });
+      setModalOpen(true);
     }
   };
 
   const salvarRelacionamento = async (e) => {
     e.preventDefault();
-    try {
-      const res = await fetch('http://localhost:8000/api/relacionar/', {
-        method: 'POST', headers: getHeaders(), credentials: 'include',
-        body: JSON.stringify(formRelacao)
-      });
-      if(res.ok) {
-        setMsg("🔗 Relacionamento criado!"); 
-        atualizarTabelas();
-      } else { 
-        setMsg("❌ Erro ao conectar"); 
+    if (isAdmin) {
+      try {
+        const res = await fetch('http://localhost:8000/api/relacionar/', {
+          method: 'POST', headers: getHeaders(), credentials: 'include',
+          body: JSON.stringify(formRelacao)
+        });
+        if(res.ok) {
+          setMsg("🔗 Relacionamento criado!"); 
+          atualizarTabelas();
+        } else { 
+          const errData = await res.text();
+          setMsg(`❌ Erro ao conectar: ${errData}`); 
+        }
+      } catch(err) { 
+        console.error(err); 
+        setMsg("Erro de conexão."); 
       }
-    } catch(err) { 
-      console.error(err); 
-      setMsg("Erro de conexão."); 
+    } else {
+      setSolicitacaoAtual({
+        tipo_acao: 'Criar',
+        entidade: 'Relacionamento',
+        uuid_entidade: '',
+        motivo: '',
+        dados_novos: formRelacao
+      });
+      setModalOpen(true);
     }
   };
 
   const dispararAcaoExclusao = async (entidade, uuid) => {
-    if (user && user.is_admin) {
+    if (isAdmin) {
       if (!window.confirm(`Admin: Tem certeza que deseja excluir este(a) ${entidade} permanentemente?`)) return;
       try {
         const url = entidade === 'Pessoa' ? `http://localhost:8000/api/pessoas/${uuid}/` : `http://localhost:8000/api/eventos/${uuid}/`;
@@ -153,7 +195,7 @@ function Admin({ user }) {
     e.preventDefault();
     const dados = entidade === 'Pessoa' ? editandoPessoa : editandoEvento;
     
-    if (user && user.is_admin) {
+    if (isAdmin) {
       try {
         const url = entidade === 'Pessoa' ? `http://localhost:8000/api/pessoas/${dados.uuid}/` : `http://localhost:8000/api/eventos/${dados.uuid}/`;
         
@@ -209,7 +251,17 @@ function Admin({ user }) {
       if (res.ok) {
         setMsg("📩 A sua solicitação foi enviada para os administradores!");
         setModalOpen(false);
+        if (solicitacaoAtual.entidade === 'Pessoa' && solicitacaoAtual.tipo_acao === 'Criar') {
+          setFormPessoa({ nomeCompleto: '', apelido: '', dataNascimento: '', dataObito: '', pai_uuid: '', mae_uuid: '', conjuge_uuid: '', dataCasamento: '' });
+        } else if (solicitacaoAtual.entidade === 'Evento' && solicitacaoAtual.tipo_acao === 'Criar') {
+          setFormEvento({ tipo: '', data: '', local: '', descricao: '' });
+        } else if (solicitacaoAtual.entidade === 'Relacionamento' && solicitacaoAtual.tipo_acao === 'Criar') {
+          setFormRelacao({ origem_uuid: '', destino_uuid: '', tipo: 'PAI' });
+        }
         setEditandoPessoa(null); setEditandoEvento(null);
+      } else {
+        const errText = await res.text();
+        setMsg(`❌ Erro ao solicitar: ${errText}`);
       }
     } catch(err) { 
       console.error(err); 
@@ -245,8 +297,14 @@ function Admin({ user }) {
           backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
         }}>
           <div style={{background: '#fff', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '500px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)'}}>
-            <h3 style={{marginTop: 0, color: '#333'}}>Justifique a {solicitacaoAtual.tipo_acao}</h3>
-            <p style={{color: '#666', fontSize: '0.9rem', marginBottom: '20px'}}>Como você não é administrador, esta ação requer aprovação.</p>
+            <h3 style={{marginTop: 0, color: '#333'}}>
+              {solicitacaoAtual.tipo_acao === 'Criar' 
+                ? `Solicitar Cadastro de ${solicitacaoAtual.entidade}` 
+                : `Justifique a ${solicitacaoAtual.tipo_acao}`}
+            </h3>
+            <p style={{color: '#666', fontSize: '0.9rem', marginBottom: '20px'}}>
+              Como você não é administrador, esta ação será enviada para aprovação.
+            </p>
             <form onSubmit={confirmarSolicitacao}>
               <textarea 
                 required rows="4" 
@@ -254,7 +312,9 @@ function Admin({ user }) {
                   width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc', marginBottom: '15px',
                   backgroundColor: '#ffffff', color: '#333333'
                 }}
-                placeholder="Ex: Descobri que o ano de nascimento correto é 1950."
+                placeholder={solicitacaoAtual.tipo_acao === 'Criar' 
+                  ? "Ex: Descreva o motivo da inclusão deste registro na árvore familiar." 
+                  : "Ex: Descobri que o ano de nascimento correto é 1950."}
                 value={solicitacaoAtual.motivo} onChange={e => setSolicitacaoAtual({...solicitacaoAtual, motivo: e.target.value})}
               />
               <div style={{display: 'flex', gap: '10px', justifyContent: 'flex-end'}}>
@@ -272,7 +332,7 @@ function Admin({ user }) {
         <button className={`tab-btn ${activeTab === 'relacao' ? 'active' : ''}`} onClick={() => {setActiveTab('relacao'); setMsg('');}}>🔗 Criar Laços</button>
         <button className={`tab-btn ${activeTab === 'gerenciar' ? 'active' : ''}`} onClick={() => {setActiveTab('gerenciar'); setMsg('');}}>📋 Gerenciar Dados</button>
         
-        {user && user.is_admin && (
+        {isAdmin && (
           <>
             <button className={`tab-btn ${activeTab === 'aprovacoes' ? 'active' : ''}`} onClick={() => {setActiveTab('aprovacoes'); setMsg(''); atualizarTabelas();}} style={{marginLeft: 'auto', backgroundColor: activeTab === 'aprovacoes' ? '#fff3e0' : 'transparent', color: activeTab === 'aprovacoes' ? '#e65100' : 'inherit'}}>
               🔔 Aprovações {listaSolicitacoes.length > 0 && `(${listaSolicitacoes.length})`}
@@ -308,7 +368,7 @@ function Admin({ user }) {
                    <input type="text" value={formPessoa.apelido} onChange={e => setFormPessoa({...formPessoa, apelido: e.target.value})} />
                  </div>
              </div>
-             <button type="submit" className="submit-btn" style={{marginTop:'10px'}}>Salvar Pessoa</button>
+             <button type="submit" className="submit-btn" style={{marginTop:'10px'}}>{isAdmin ? "Salvar Pessoa" : "Solicitar Cadastro de Pessoa"}</button>
            </form>
         )}
 
@@ -318,7 +378,7 @@ function Admin({ user }) {
            <div className="form-group"><label>Tipo *</label><input required type="text" value={formEvento.tipo} onChange={e => setFormEvento({...formEvento, tipo: e.target.value})} /></div>
            <div className="form-group"><label>Data *</label><input required type="date" value={formEvento.data} onChange={e => setFormEvento({...formEvento, data: e.target.value})} /></div>
            <div className="form-group"><label>Local</label><input type="text" value={formEvento.local} onChange={e => setFormEvento({...formEvento, local: e.target.value})} /></div>
-           <button type="submit" className="submit-btn">Salvar Evento</button>
+           <button type="submit" className="submit-btn">{isAdmin ? "Salvar Evento" : "Solicitar Criação de Evento"}</button>
          </form>
         )}
 
@@ -337,14 +397,14 @@ function Admin({ user }) {
               </select>
             </div>
             <div className="form-group"><label>Destino</label><select required onChange={e => setFormRelacao({...formRelacao, destino_uuid: e.target.value})}><option value="">Selecione...</option>{formRelacao.tipo === 'FOI' ? listaEventos.map(e => <option key={e.uuid} value={e.uuid}>{e.data} - {e.tipo}</option>) : listaPessoas.map(p => <option key={p.uuid} value={p.uuid}>{p.nome}</option>)}</select></div>
-            <button type="submit" className="submit-btn" style={{backgroundColor: '#1877f2'}}>Criar Conexão</button>
+            <button type="submit" className="submit-btn" style={{backgroundColor: '#1877f2'}}>{isAdmin ? "Criar Conexão" : "Solicitar Conexão"}</button>
           </form>
         )}
 
         {activeTab === 'gerenciar' && (
           <div>
             <h2 className="form-title">Gerenciar Registros</h2>
-            <p style={{color: '#666', marginBottom: '20px'}}>{user && user.is_admin ? "Como admin, as suas edições são imediatas." : "Você pode solicitar edições que serão revisadas pelos administradores."}</p>
+            <p style={{color: '#666', marginBottom: '20px'}}>{isAdmin ? "Como admin, as suas edições são imediatas." : "Você pode solicitar cadastros, edições e exclusões que serão revisadas pelos administradores."}</p>
 
             <h3 style={{marginBottom: '10px', color: '#333'}}>Pessoas</h3>
             <div style={{overflowX: 'auto', background: '#fff', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', marginBottom: '30px'}}>
@@ -385,7 +445,7 @@ function Admin({ user }) {
 
                             <div style={{display: 'flex', justifyContent: 'flex-end', gap: '10px'}}>
                               <button type="button" onClick={() => setEditandoPessoa(null)} style={{background: '#9e9e9e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '8px 15px'}}>Cancelar</button>
-                              <button type="submit" style={{background: '#1877f2', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '8px 15px'}}>{user && user.is_admin ? "Salvar Tudo" : "Solicitar Alteração"}</button>
+                              <button type="submit" style={{background: '#1877f2', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '8px 15px'}}>{isAdmin ? "Salvar Tudo" : "Solicitar Alteração"}</button>
                             </div>
                           </form>
                         </td>
@@ -448,7 +508,7 @@ function Admin({ user }) {
 
                             <div style={{display: 'flex', justifyContent: 'flex-end', gap: '10px'}}>
                               <button type="button" onClick={() => setEditandoEvento(null)} style={{background: '#9e9e9e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '8px 15px'}}>Cancelar</button>
-                              <button type="submit" style={{background: '#1877f2', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '8px 15px'}}>{user && user.is_admin ? "Salvar Tudo" : "Solicitar Alteração"}</button>
+                              <button type="submit" style={{background: '#1877f2', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '8px 15px'}}>{isAdmin ? "Salvar Tudo" : "Solicitar Alteração"}</button>
                             </div>
 
                           </form>
@@ -478,11 +538,39 @@ function Admin({ user }) {
             {listaSolicitacoes.length === 0 ? <p style={{color: '#666'}}>Não há solicitações pendentes no momento.</p> : (
               <div style={{display: 'grid', gap: '15px'}}>
                 {listaSolicitacoes.map(sol => (
-                  <div key={sol.id} style={{background: '#fff', borderLeft: sol.tipo_acao === 'Excluir' ? '5px solid #d32f2f' : '5px solid #1877f2', padding: '15px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)'}}>
+                  <div key={sol.id} style={{background: '#fff', borderLeft: sol.tipo_acao === 'Excluir' ? '5px solid #d32f2f' : sol.tipo_acao === 'Criar' ? '5px solid #2e7d32' : '5px solid #1877f2', padding: '15px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)'}}>
                     <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                       <h4 style={{margin: 0, color: '#333'}}>👤 {sol.usuario} deseja <strong>{sol.tipo_acao}</strong> um(a) {sol.entidade}</h4>
                       <span style={{fontSize: '0.8rem', color: '#888'}}>{sol.data_solicitacao}</span>
                     </div>
+
+                    {sol.tipo_acao === 'Criar' && sol.dados_novos && (
+                      <div style={{margin: '8px 0', padding: '8px', background: '#f8f9fa', borderRadius: '4px', fontSize: '0.85rem', color: '#444'}}>
+                        {sol.entidade === 'Pessoa' && (
+                          <p style={{margin: 0}}>
+                            <strong>Dados:</strong> {sol.dados_novos.nomeCompleto} {sol.dados_novos.apelido ? `("${sol.dados_novos.apelido}")` : ''} 
+                            {sol.dados_novos.dataNascimento ? ` | Nasc: ${sol.dados_novos.dataNascimento}` : ''}
+                            {sol.dados_novos.dataObito ? ` | Óbito: ${sol.dados_novos.dataObito}` : ''}
+                          </p>
+                        )}
+                        {sol.entidade === 'Evento' && (
+                          <p style={{margin: 0}}>
+                            <strong>Dados:</strong> {sol.dados_novos.tipo} {sol.dados_novos.data ? ` (${sol.dados_novos.data})` : ''} 
+                            {sol.dados_novos.local ? ` em ${sol.dados_novos.local}` : ''}
+                          </p>
+                        )}
+                        {sol.entidade === 'Relacionamento' && (
+                          <p style={{margin: 0}}>
+                            <strong>Relação:</strong> {listaPessoas.find(p => p.uuid === sol.dados_novos.origem_uuid)?.nome || 'Origem'} 
+                            {' '}&rarr; <strong>{sol.dados_novos.tipo}</strong> &rarr;{' '}
+                            {sol.dados_novos.tipo === 'FOI' 
+                              ? (listaEventos.find(e => e.uuid === sol.dados_novos.destino_uuid)?.tipo || 'Evento')
+                              : (listaPessoas.find(p => p.uuid === sol.dados_novos.destino_uuid)?.nome || 'Destino')}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     <p style={{margin: '10px 0', color: '#555'}}><strong>Motivo:</strong> "{sol.motivo}"</p>
                     <div style={{display: 'flex', gap: '10px'}}>
                       <button onClick={() => julgarSolicitacao(sol.id, 'APROVAR')} style={{padding: '8px 15px', background: '#2e7d32', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>Aprovar e Aplicar</button>

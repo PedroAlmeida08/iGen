@@ -88,7 +88,12 @@ def api_login(request):
             login(request, user)
             return JsonResponse({
                 'message': 'Login realizado com sucesso!',
-                'user': {'id': user.id, 'username': user.username}
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'is_superuser': user.is_superuser,
+                    'is_staff': user.is_staff
+                }
             })
         else:
             return JsonResponse({'message': 'Usuário ou senha incorretos.'}, status=401)
@@ -113,7 +118,12 @@ def api_check_auth(request):
 
         return JsonResponse({
             'is_logged_in': True,
-            'user': {'id': request.user.id, 'username': request.user.username},
+            'user': {
+                'id': request.user.id,
+                'username': request.user.username,
+                'is_superuser': request.user.is_superuser,
+                'is_staff': request.user.is_staff
+            },
             'familias': lista_familias
         })
     return JsonResponse({'is_logged_in': False})
@@ -188,8 +198,8 @@ def api_listar_pessoas(request):
         return JsonResponse(data, safe=False)
 
     elif request.method == 'POST':
-        if membro.funcao == 'LEITOR':
-            return HttpResponseForbidden("Leitores não podem registrar novas pessoas.")
+        if membro.funcao != 'ADMIN':
+            return HttpResponseForbidden("Apenas administradores podem cadastrar pessoas diretamente. Usuários comuns devem enviar uma solicitação.")
 
         try:
             dados = json.loads(request.body)
@@ -588,8 +598,8 @@ def api_listar_eventos(request):
         return JsonResponse(data, safe=False)
 
     elif request.method == 'POST':
-        if membro.funcao == 'LEITOR':
-            return HttpResponseForbidden("Leitores não podem registar novos eventos.")
+        if membro.funcao != 'ADMIN':
+            return HttpResponseForbidden("Apenas administradores podem registrar eventos diretamente. Usuários comuns devem enviar uma solicitação.")
 
         try:
             dados = json.loads(request.body)
@@ -787,8 +797,8 @@ def api_criar_relacionamento(request):
         return erro
 
     if request.method == 'POST':
-        if membro.funcao == 'LEITOR':
-            return HttpResponseForbidden("Leitores não podem alterar a estrutura da árvore.")
+        if membro.funcao != 'ADMIN':
+            return HttpResponseForbidden("Apenas administradores podem criar relacionamentos diretamente. Usuários comuns devem enviar uma solicitação.")
 
         try:
             dados = json.loads(request.body)
@@ -878,6 +888,14 @@ def api_solicitacoes(request):
 
         solicitacoes = Solicitacao.objects.filter(
             familia=familia_ws, status='PENDENTE')
+        def parse_dados_novos(val):
+            if not val:
+                return {}
+            try:
+                return json.loads(val)
+            except Exception:
+                return val
+
         data = [{
             'id': s.id,
             'usuario': s.usuario.username,
@@ -885,33 +903,40 @@ def api_solicitacoes(request):
             'entidade': s.entidade,
             'uuid_entidade': s.uuid_entidade,
             'motivo': s.motivo,
-            'dados_novos': json.loads(s.dados_novos) if s.dados_novos else {},
+            'dados_novos': parse_dados_novos(s.dados_novos),
             'data_solicitacao': s.data_solicitacao.strftime("%d/%m/%Y - %H:%M")
         } for s in solicitacoes]
 
         return JsonResponse(data, safe=False)
 
     elif request.method == 'POST':
-        if membro.funcao == 'ADMIN':
-            return HttpResponseBadRequest("Administradores podem alterar os dados diretamente sem solicitar.")
-
+        # BLOQUEIO REMOVIDO: Agora qualquer membro (até admins "confusos" pelo React) pode abrir solicitação
         try:
             dados = json.loads(request.body)
+
+            # BLINDAGEM: Garante que os dados sejam convertidos para string corretamente
+            # evitando falhas caso o frontend envie como objeto puro ou stringificada
+            dados_novos_raw = dados.get('dados_novos', {})
+            dados_novos_str = dados_novos_raw if isinstance(
+                dados_novos_raw, str) else json.dumps(dados_novos_raw)
+
             Solicitacao.objects.create(
                 usuario=request.user,
                 familia=familia_ws,
                 tipo_acao=dados['tipo_acao'],
                 entidade=dados['entidade'],
-                uuid_entidade=dados['uuid_entidade'],
-                motivo=dados['motivo'],
-                dados_novos=json.dumps(dados.get('dados_novos', {}))
+                uuid_entidade=dados.get('uuid_entidade', ''),
+                motivo=dados.get('motivo', ''),
+                dados_novos=dados_novos_str
             )
 
             registrar_log(request.user, familia_ws, "Solicitou",
-                          dados['entidade'], f"Pediu para {dados['tipo_acao']} - Motivo: {dados['motivo']}")
+                          dados['entidade'], f"Pediu para {dados['tipo_acao']} - Motivo: {dados.get('motivo', '')}")
             return JsonResponse({'message': 'Solicitação enviada aos administradores da família!'})
         except Exception as e:
             return HttpResponseBadRequest(f"Erro ao solicitar: {str(e)}")
+
+    return HttpResponseBadRequest("Método não permitido.")
 
 
 @csrf_exempt
@@ -937,12 +962,12 @@ def api_processar_solicitacao(request, id):
                 return JsonResponse({'message': 'Solicitação negada.'})
 
             elif acao_admin == 'APROVAR':
-                if solicitacao.entidade == 'Pessoa':
-                    node = Pessoa.nodes.get(uuid=solicitacao.uuid_entidade)
-                else:
-                    node = Evento.nodes.get(uuid=solicitacao.uuid_entidade)
-
                 if solicitacao.tipo_acao == 'Excluir':
+                    if solicitacao.entidade == 'Pessoa':
+                        node = Pessoa.nodes.get(uuid=solicitacao.uuid_entidade)
+                    else:
+                        node = Evento.nodes.get(uuid=solicitacao.uuid_entidade)
+
                     nome_registro = getattr(
                         node, 'nomeCompleto', getattr(node, 'tipo', 'Registro'))
                     node.delete()
@@ -950,7 +975,13 @@ def api_processar_solicitacao(request, id):
                                   solicitacao.entidade, f"Excluiu {nome_registro} após aprovação")
 
                 elif solicitacao.tipo_acao == 'Editar':
-                    novos_dados = json.loads(solicitacao.dados_novos)
+                    if solicitacao.entidade == 'Pessoa':
+                        node = Pessoa.nodes.get(uuid=solicitacao.uuid_entidade)
+                    else:
+                        node = Evento.nodes.get(uuid=solicitacao.uuid_entidade)
+
+                    novos_dados = json.loads(solicitacao.dados_novos) if isinstance(
+                        solicitacao.dados_novos, str) else solicitacao.dados_novos
                     uuid = node.uuid
 
                     if solicitacao.entidade == 'Pessoa':
@@ -1003,6 +1034,151 @@ def api_processar_solicitacao(request, id):
 
                     registrar_log(request.user, familia_ws, "Editou",
                                   solicitacao.entidade, "Editou registro após aprovação")
+
+                elif solicitacao.tipo_acao == 'Criar':
+                    novos_dados = json.loads(solicitacao.dados_novos) if isinstance(
+                        solicitacao.dados_novos, str) else solicitacao.dados_novos
+
+                    if solicitacao.entidade == 'Pessoa':
+                        data_str = novos_dados.get('dataNascimento')
+                        data_nasc_obj = None
+                        if data_str:
+                            try:
+                                data_nasc_obj = datetime.strptime(data_str, '%Y-%m-%d').date()
+                            except ValueError:
+                                pass
+
+                        data_obito_str = novos_dados.get('dataObito')
+                        data_obito_obj = None
+                        if data_obito_str:
+                            try:
+                                data_obito_obj = datetime.strptime(data_obito_str, '%Y-%m-%d').date()
+                            except ValueError:
+                                pass
+
+                        nova_pessoa = Pessoa(
+                            nomeCompleto=novos_dados.get('nomeCompleto'),
+                            apelido=novos_dados.get('apelido'),
+                            dataNascimento=data_nasc_obj,
+                            criado_por_id=solicitacao.usuario.id,
+                            criado_por_nome=solicitacao.usuario.username,
+                            criado_em=datetime.now().isoformat()
+                        ).save()
+                        nova_pessoa.pertence_a.connect(familia_node)
+
+                        if data_nasc_obj:
+                            evento_nasc = Evento(
+                                tipo='Nascimento',
+                                data=data_nasc_obj,
+                                descricao=f"Nascimento de {nova_pessoa.nomeCompleto}",
+                                local="Local de Nascimento"
+                            ).save()
+                            evento_nasc.pertence_a.connect(familia_node)
+                            nova_pessoa.participou.connect(evento_nasc)
+
+                        if data_obito_obj:
+                            evento_obito = Evento(
+                                tipo='Óbito',
+                                data=data_obito_obj,
+                                descricao=f"Falecimento de {nova_pessoa.nomeCompleto}",
+                                local="Não informado"
+                            ).save()
+                            evento_obito.pertence_a.connect(familia_node)
+                            nova_pessoa.participou.connect(evento_obito)
+
+                        uuid_pai = novos_dados.get('pai_uuid')
+                        if uuid_pai:
+                            try:
+                                pai = Pessoa.nodes.get(uuid=uuid_pai)
+                                if pai.pertence_a.is_connected(familia_node):
+                                    pai.pai_de.connect(nova_pessoa)
+                            except Pessoa.DoesNotExist:
+                                pass
+
+                        uuid_mae = novos_dados.get('mae_uuid')
+                        if uuid_mae:
+                            try:
+                                mae = Pessoa.nodes.get(uuid=uuid_mae)
+                                if mae.pertence_a.is_connected(familia_node):
+                                    mae.mae_de.connect(nova_pessoa)
+                            except Pessoa.DoesNotExist:
+                                pass
+
+                        uuid_conjuge = novos_dados.get('conjuge_uuid')
+                        if uuid_conjuge:
+                            try:
+                                conjuge = Pessoa.nodes.get(uuid=uuid_conjuge)
+                                if conjuge.pertence_a.is_connected(familia_node):
+                                    nova_pessoa.casado_com.connect(conjuge)
+
+                                    dt_cas_str = novos_dados.get('dataCasamento')
+                                    if dt_cas_str:
+                                        try:
+                                            dt_cas = datetime.strptime(dt_cas_str, '%Y-%m-%d').date()
+                                            ev_cas = Evento(
+                                                tipo='Casamento', data=dt_cas,
+                                                descricao=f"Casamento de {nova_pessoa.nomeCompleto} e {conjuge.nomeCompleto}"
+                                            ).save()
+                                            ev_cas.pertence_a.connect(familia_node)
+                                            nova_pessoa.participou.connect(ev_cas)
+                                            conjuge.participou.connect(ev_cas)
+                                        except ValueError:
+                                            pass
+                            except Pessoa.DoesNotExist:
+                                pass
+
+                        solicitacao.uuid_entidade = nova_pessoa.uuid
+                        registrar_log(request.user, familia_ws, "Criou",
+                                      "Pessoa", f"Cadastrou: {nova_pessoa.nomeCompleto} após aprovação da solicitação de {solicitacao.usuario.username}")
+
+                    elif solicitacao.entidade == 'Evento':
+                        data_str = novos_dados.get('data')
+                        data_formatada = None
+                        if data_str:
+                            try:
+                                data_formatada = datetime.strptime(data_str, '%Y-%m-%d').date()
+                            except ValueError:
+                                pass
+
+                        novo_evento = Evento(
+                            tipo=novos_dados.get('tipo'),
+                            data=data_formatada,
+                            local=novos_dados.get('local'),
+                            descricao=novos_dados.get('descricao')
+                        ).save()
+                        novo_evento.pertence_a.connect(familia_node)
+                        solicitacao.uuid_entidade = novo_evento.uuid
+                        registrar_log(request.user, familia_ws, "Criou",
+                                      "Evento", f"Registrou o evento: {novo_evento.tipo} após aprovação da solicitação de {solicitacao.usuario.username}")
+
+                    elif solicitacao.entidade == 'Relacionamento':
+                        origem = Pessoa.nodes.get(uuid=novos_dados['origem_uuid'])
+                        tipo = novos_dados['tipo']
+
+                        if tipo == 'FOI':
+                            destino = Evento.nodes.get(uuid=novos_dados['destino_uuid'])
+                            if not destino.pertence_a.is_connected(familia_node):
+                                return HttpResponseForbidden("O evento não pertence à sua família.")
+                            origem.participou.connect(destino)
+                            registrar_log(request.user, familia_ws, "Criou Laço", "Relacionamento",
+                                          f"Conectou {origem.nomeCompleto} ao evento {destino.tipo} após aprovação da solicitação de {solicitacao.usuario.username}")
+                        else:
+                            destino = Pessoa.nodes.get(uuid=novos_dados['destino_uuid'])
+                            if not destino.pertence_a.is_connected(familia_node):
+                                return HttpResponseForbidden("A pessoa de destino não pertence à sua família.")
+
+                            if tipo == 'PAI':
+                                origem.pai_de.connect(destino)
+                            elif tipo == 'MAE':
+                                origem.mae_de.connect(destino)
+                            elif tipo == 'CASADO':
+                                origem.casado_com.connect(destino)
+                            elif tipo == 'IRMAO':
+                                origem.irmao_de.connect(destino)
+                                destino.irmao_de.connect(origem)
+
+                            registrar_log(request.user, familia_ws, "Criou Laço", "Relacionamento",
+                                          f"Conectou {origem.nomeCompleto} como {tipo} de {destino.nomeCompleto} após aprovação da solicitação de {solicitacao.usuario.username}")
 
                 solicitacao.status = 'APROVADA'
                 solicitacao.save()

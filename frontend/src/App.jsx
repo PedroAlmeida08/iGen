@@ -25,9 +25,17 @@ function App() {
           const familiaAtiva = localStorage.getItem('familiaAtiva');
           const pertenceAFamilia = data.familias.some(f => f.uuid === familiaAtiva);
           
+          let famUuid = familiaAtiva;
           if (!pertenceAFamilia && data.familias.length > 0) {
-             localStorage.setItem('familiaAtiva', data.familias[0].uuid);
+             famUuid = data.familias[0].uuid;
+             localStorage.setItem('familiaAtiva', famUuid);
           }
+
+          const famObj = data.familias.find(f => f.uuid === famUuid) || data.familias[0];
+          const isAdmin = Boolean(data.user.is_superuser || (famObj && famObj.funcao === 'ADMIN'));
+
+          setUser({ ...data.user, is_admin: isAdmin });
+          setFamilias(data.familias); 
         }
       })
       .catch(err => console.log("Não autenticado"));
@@ -57,7 +65,7 @@ function App() {
             />
             <Route 
               path="/admin" 
-              element={user ? <Admin user={user} /> : <Navigate to="/login" replace />} 
+              element={user ? <Admin user={user} familias={familias} /> : <Navigate to="/login" replace />} 
             />
           </Routes>
         </div>
