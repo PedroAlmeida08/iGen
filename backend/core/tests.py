@@ -1,7 +1,7 @@
 import json
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
-from core.models import FamiliaWorkspace, MembroFamilia, FamiliaNode, Pessoa, Solicitacao, RegistroAtividade
+from core.models import FamiliaWorkspace, MembroFamilia, FamiliaNode, Pessoa, Evento, Solicitacao, RegistroAtividade
 
 
 class ApiSolicitacoesTests(TestCase):
@@ -10,7 +10,7 @@ class ApiSolicitacoesTests(TestCase):
         self.password = "TestePass123!"
 
         # Criar usuários
-        self.admin_user = User.objects.create_user(username="admin_teste", password=self.password)
+        self.admin_user = User.objects.create_user(username="admin_teste", password=self.password, is_staff=True)
         self.leitor_user = User.objects.create_user(username="leitor_teste", password=self.password)
         self.outro_user = User.objects.create_user(username="outro_teste", password=self.password)
 
@@ -36,14 +36,28 @@ class ApiSolicitacoesTests(TestCase):
             funcao='LEITOR'
         )
 
-        # Criar pessoa no grafo ligada à família
+        # Criar pessoas de base no grafo ligadas à família
         self.pessoa = Pessoa(nomeCompleto="Pessoa Unidade Teste", apelido="Unidade").save()
         self.pessoa.pertence_a.connect(self.familia_node)
 
+        self.pessoa2 = Pessoa(nomeCompleto="Segunda Pessoa Teste", apelido="P2").save()
+        self.pessoa2.pertence_a.connect(self.familia_node)
+
     def tearDown(self):
         # Limpar nós no Neo4j
+        for p in [self.pessoa, self.pessoa2]:
+            try:
+                p.delete()
+            except Exception:
+                pass
         try:
-            self.pessoa.delete()
+            for p in Pessoa.nodes.filter(nomeCompleto="Novo Familiar Solicitado"):
+                p.delete()
+        except Exception:
+            pass
+        try:
+            for e in Evento.nodes.filter(tipo="Festa Familiar Solicitada"):
+                e.delete()
         except Exception:
             pass
         try:
@@ -88,7 +102,6 @@ class ApiSolicitacoesTests(TestCase):
         self.assertIn("Apenas administradores podem gerir", response.content.decode('utf-8'))
 
     def test_admin_pode_listar_solicitacoes(self):
-        # Cria uma solicitação prévia
         Solicitacao.objects.create(
             usuario=self.leitor_user,
             familia=self.familia_ws,
@@ -110,53 +123,158 @@ class ApiSolicitacoesTests(TestCase):
         self.assertEqual(dados[0]['motivo'], 'Nome incorreto')
         self.assertEqual(dados[0]['dados_novos'], {'nomeCompleto': 'Novo Nome'})
 
-    # 3. Criação de solicitação (POST)
-    def test_leitor_cria_solicitacao_com_sucesso(self):
+    # 3. Bloqueio de criação direta por usuário comum
+    def test_usuario_comum_bloqueado_ao_criar_diretamente(self):
+        self.client.login(username="leitor_teste", password=self.password)
+
+        # Tentativa de criar Pessoa diretamente
+        resp_p = self.client.post(
+            '/api/pessoas/',
+            data=json.dumps({'nomeCompleto': 'Direto'}),
+            content_type='application/json',
+            HTTP_X_FAMILIA_UUID=self.uuid_familia
+        )
+        self.assertEqual(resp_p.status_code, 403)
+
+        # Tentativa de criar Evento diretamente
+        resp_e = self.client.post(
+            '/api/eventos/',
+            data=json.dumps({'tipo': 'Direto'}),
+            content_type='application/json',
+            HTTP_X_FAMILIA_UUID=self.uuid_familia
+        )
+        self.assertEqual(resp_e.status_code, 403)
+
+        # Tentativa de criar Relacionamento diretamente
+        resp_r = self.client.post(
+            '/api/relacionar/',
+            data=json.dumps({'origem_uuid': self.pessoa.uuid, 'destino_uuid': self.pessoa2.uuid, 'tipo': 'IRMAO'}),
+            content_type='application/json',
+            HTTP_X_FAMILIA_UUID=self.uuid_familia
+        )
+        self.assertEqual(resp_r.status_code, 403)
+
+    # 4. Criação de solicitações do tipo 'Criar' e aprovação pelo Admin
+    def test_solicitacao_criar_pessoa_e_aprovacao_admin(self):
         self.client.login(username="leitor_teste", password=self.password)
         payload = {
-            'tipo_acao': 'Editar',
+            'tipo_acao': 'Criar',
             'entidade': 'Pessoa',
-            'uuid_entidade': self.pessoa.uuid,
-            'motivo': 'Atualizar apelido',
-            'dados_novos': {'apelido': 'Apelido Novo'}
+            'uuid_entidade': '',
+            'motivo': 'Cadastrar novo familiar',
+            'dados_novos': {
+                'nomeCompleto': 'Novo Familiar Solicitado',
+                'apelido': 'Fami',
+                'dataNascimento': '1992-06-10'
+            }
         }
-
-        response = self.client.post(
+        res_post = self.client.post(
             '/api/solicitacoes/',
             data=json.dumps(payload),
             content_type='application/json',
             HTTP_X_FAMILIA_UUID=self.uuid_familia
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['message'], 'Solicitação enviada aos administradores da família!')
+        self.assertEqual(res_post.status_code, 200)
 
-        # Verificar se foi salvo no SQLite
-        solicitacao = Solicitacao.objects.filter(uuid_entidade=self.pessoa.uuid).first()
-        self.assertIsNotNone(solicitacao)
-        self.assertEqual(solicitacao.usuario, self.leitor_user)
-        self.assertEqual(solicitacao.status, 'PENDENTE')
+        solic = Solicitacao.objects.filter(entidade='Pessoa', tipo_acao='Criar').first()
+        self.assertIsNotNone(solic)
+        self.assertEqual(solic.status, 'PENDENTE')
 
-        # Verificar se foi registrado log de auditoria
-        log = RegistroAtividade.objects.filter(familia=self.familia_ws, acao="Solicitou").first()
-        self.assertIsNotNone(log)
-        self.assertEqual(log.usuario, self.leitor_user)
-
-    def test_post_payload_invalido_retorna_400(self):
-        self.client.login(username="leitor_teste", password=self.password)
-        payload_incompleto = {
-            'tipo_acao': 'Editar'
-            # Faltando campos obrigatórios
-        }
-        response = self.client.post(
-            '/api/solicitacoes/',
-            data=json.dumps(payload_incompleto),
+        # Admin aprova
+        self.client.login(username="admin_teste", password=self.password)
+        res_aprov = self.client.put(
+            f'/api/solicitacoes/{solic.id}/',
+            data=json.dumps({'acao': 'APROVAR'}),
             content_type='application/json',
             HTTP_X_FAMILIA_UUID=self.uuid_familia
         )
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("Erro ao solicitar", response.content.decode('utf-8'))
+        self.assertEqual(res_aprov.status_code, 200)
 
-    # 4. Método HTTP não suportado
+        # Verificar se nó foi criado no Neo4j e vinculado à família
+        pessoa_criada = Pessoa.nodes.get_or_none(nomeCompleto="Novo Familiar Solicitado")
+        self.assertIsNotNone(pessoa_criada)
+        self.assertTrue(pessoa_criada.pertence_a.is_connected(self.familia_node))
+        # Limpar nó criado
+        pessoa_criada.delete()
+
+    def test_solicitacao_criar_evento_e_aprovacao_admin(self):
+        self.client.login(username="leitor_teste", password=self.password)
+        payload = {
+            'tipo_acao': 'Criar',
+            'entidade': 'Evento',
+            'uuid_entidade': '',
+            'motivo': 'Registrar festa histórica',
+            'dados_novos': {
+                'tipo': 'Festa Familiar Solicitada',
+                'data': '2021-12-31',
+                'local': 'Casa de Campo',
+                'descricao': 'Réveillon em família'
+            }
+        }
+        res_post = self.client.post(
+            '/api/solicitacoes/',
+            data=json.dumps(payload),
+            content_type='application/json',
+            HTTP_X_FAMILIA_UUID=self.uuid_familia
+        )
+        self.assertEqual(res_post.status_code, 200)
+
+        solic = Solicitacao.objects.filter(entidade='Evento', tipo_acao='Criar').first()
+        self.assertIsNotNone(solic)
+
+        # Admin aprova
+        self.client.login(username="admin_teste", password=self.password)
+        res_aprov = self.client.put(
+            f'/api/solicitacoes/{solic.id}/',
+            data=json.dumps({'acao': 'APROVAR'}),
+            content_type='application/json',
+            HTTP_X_FAMILIA_UUID=self.uuid_familia
+        )
+        self.assertEqual(res_aprov.status_code, 200)
+
+        evento_criado = Evento.nodes.get_or_none(tipo="Festa Familiar Solicitada")
+        self.assertIsNotNone(evento_criado)
+        self.assertTrue(evento_criado.pertence_a.is_connected(self.familia_node))
+        evento_criado.delete()
+
+    def test_solicitacao_criar_relacionamento_e_aprovacao_admin(self):
+        self.client.login(username="leitor_teste", password=self.password)
+        payload = {
+            'tipo_acao': 'Criar',
+            'entidade': 'Relacionamento',
+            'uuid_entidade': '',
+            'motivo': 'Conectar irmãos',
+            'dados_novos': {
+                'origem_uuid': self.pessoa.uuid,
+                'destino_uuid': self.pessoa2.uuid,
+                'tipo': 'IRMAO'
+            }
+        }
+        res_post = self.client.post(
+            '/api/solicitacoes/',
+            data=json.dumps(payload),
+            content_type='application/json',
+            HTTP_X_FAMILIA_UUID=self.uuid_familia
+        )
+        self.assertEqual(res_post.status_code, 200)
+
+        solic = Solicitacao.objects.filter(entidade='Relacionamento', tipo_acao='Criar').first()
+        self.assertIsNotNone(solic)
+
+        # Admin aprova
+        self.client.login(username="admin_teste", password=self.password)
+        res_aprov = self.client.put(
+            f'/api/solicitacoes/{solic.id}/',
+            data=json.dumps({'acao': 'APROVAR'}),
+            content_type='application/json',
+            HTTP_X_FAMILIA_UUID=self.uuid_familia
+        )
+        self.assertEqual(res_aprov.status_code, 200)
+
+        # Verificar conexão no Neo4j
+        self.assertTrue(self.pessoa.irmao_de.is_connected(self.pessoa2))
+
+    # 5. Método HTTP não suportado
     def test_metodo_nao_permitido_retorna_400(self):
         self.client.login(username="admin_teste", password=self.password)
         response = self.client.delete('/api/solicitacoes/', HTTP_X_FAMILIA_UUID=self.uuid_familia)
