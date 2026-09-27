@@ -34,4 +34,13 @@ urlpatterns = [
     path('api/solicitacoes/', views.api_solicitacoes, name='api_solicitacoes'),
     path('api/solicitacoes/<int:id>/', views.api_processar_solicitacao,
          name='api_processar_solicitacao'),
+
+    # --- 8. FAMÍLIAS (Workspaces) ---
+    path('api/familias/criar/', views.api_criar_familia, name='api_criar_familia'),
+    path('api/familias/entrar/', views.api_entrar_familia, name='api_entrar_familia'),
+    path('api/familias/<str:uuid>/', views.api_excluir_familia, name='api_excluir_familia'),
+    path('api/familias/<str:uuid>/membros/', views.api_listar_membros_familia, name='api_familias_membros'),
+    path('api/membros/', views.api_listar_membros_familia, name='api_listar_membros'),
+    path('api/membros/<int:membro_id>/funcao/', views.api_alterar_funcao_membro, name='api_alterar_funcao_membro'),
 ]
+
