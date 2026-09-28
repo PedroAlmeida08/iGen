@@ -1,4 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'; // <--- MANTÉM-SE AQUI
+import { API_BASE_URL } from '../config';
 import './Navbar.css';
 
 function Navbar({ user, setUser, familias }) { // NOVO: Recebe 'familias' do App.jsx
@@ -9,7 +10,7 @@ function Navbar({ user, setUser, familias }) { // NOVO: Recebe 'familias' do App
 
   const handleLogout = async () => {
     try {
-      await fetch('http://127.0.0.1:8000/api/auth/logout/', { 
+      await fetch(`${API_BASE_URL}/api/auth/logout/`, { 
         credentials: 'include' 
       });
       setUser(null);
@@ -23,16 +24,17 @@ function Navbar({ user, setUser, familias }) { // NOVO: Recebe 'familias' do App
 
   const handleTrocarFamilia = (e) => {
     const novoUuid = e.target.value;
-    localStorage.setItem('familiaAtiva', novoUuid);
+    if (!novoUuid) {
+      localStorage.removeItem('familiaAtiva');
+    } else {
+      localStorage.setItem('familiaAtiva', novoUuid);
+    }
     window.location.reload(); // Recarrega a página para atualizar os dados com o novo filtro
   };
 
-  const familiaObj = familias?.find(f => f.uuid === familiaAtiva) || (familias && familias[0]);
-  const isAdmin = Boolean(
-    user?.is_superuser || 
-    user?.is_admin || 
-    (familiaObj && familiaObj.funcao === 'ADMIN')
-  );
+  const isSuperuser = Boolean(user?.is_superuser);
+  const familiaObj = familias?.find(f => f.uuid === familiaAtiva);
+  const isLeitor = !isSuperuser && familiaObj?.funcao === 'LEITOR';
 
   return (
     <nav className="navbar">
@@ -45,10 +47,12 @@ function Navbar({ user, setUser, familias }) { // NOVO: Recebe 'familias' do App
         
         {user ? (
           <>
-            <li><NavLink to="/admin">{isAdmin ? "Admin" : "Gestão"}</NavLink></li>
+            {!isLeitor && (
+              <li><NavLink to="/admin">{isSuperuser ? "Admin" : "Gestão"}</NavLink></li>
+            )}
             
-            {/* NOVO: Seletor de Famílias na Navbar */}
-            {familias && familias.length > 0 && (
+            {/* Seletor de Famílias na Navbar (Apenas Superusuários) */}
+            {isSuperuser && (
               <li className="navbar-familia-selector" style={{ margin: '0 10px' }}>
                 <select 
                   value={familiaAtiva || ''} 
@@ -65,7 +69,10 @@ function Navbar({ user, setUser, familias }) { // NOVO: Recebe 'familias' do App
                   }}
                   title="Mudar de Família"
                 >
-                  {familias.map(f => (
+                  {user?.is_superuser && (
+                    <option value="">🌐 Visão Geral (Moderação)</option>
+                  )}
+                  {familias?.map(f => (
                     <option key={f.uuid} value={f.uuid}>
                       {f.nome}
                     </option>

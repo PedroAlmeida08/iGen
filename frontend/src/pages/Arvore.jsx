@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ReactFlow, { Controls, Background, MarkerType, applyNodeChanges, applyEdgeChanges } from 'reactflow';
 import dagre from 'dagre';
+import { API_BASE_URL } from '../config';
 import 'reactflow/dist/style.css';
 import './Arvore.css';
 
@@ -39,7 +41,8 @@ const getLayoutedElements = (nodes, edges) => {
   return { nodes: layoutedNodes, edges };
 };
 
-function Arvore() {
+function Arvore({ user }) {
+  const navigate = useNavigate();
   const [grafoDados, setGrafoDados] = useState({ nodes: [], edges: [] });
   const [buscaNome, setBuscaNome] = useState('');
   
@@ -52,17 +55,20 @@ function Arvore() {
 
   const reactFlowWrapper = useRef(null);
 
+  const familiaAtiva = localStorage.getItem('familiaAtiva');
+  const temFamilia = Boolean(familiaAtiva && familiaAtiva !== 'undefined' && familiaAtiva !== 'null' && familiaAtiva !== '');
+
   const onNodesChange = useCallback((changes) => setNodes((nds) => applyNodeChanges(changes, nds)), []);
   const onEdgesChange = useCallback((changes) => setEdges((eds) => applyEdgeChanges(changes, eds)), []);
 
   const getHeaders = () => ({
     'Content-Type': 'application/json',
-    'X-Familia-UUID': localStorage.getItem('familiaAtiva') || ''
+    'X-Familia-UUID': temFamilia ? familiaAtiva : ''
   });
 
   const carregarGrafo = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/grafo/', {
+      const res = await fetch(`${API_BASE_URL}/api/grafo/`, {
         headers: getHeaders(),
         credentials: 'include'
       });
@@ -74,8 +80,10 @@ function Arvore() {
   };
 
   useEffect(() => {
-    carregarGrafo();
-  }, []);
+    if (user && temFamilia) {
+      carregarGrafo();
+    }
+  }, [familiaAtiva, user, temFamilia]);
 
   useEffect(() => {
     if (grafoDados.nodes.length === 0) return;
@@ -166,7 +174,7 @@ function Arvore() {
   const onNodeClick = async (event, node) => {
     setCarregandoDetalhes(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/pessoas/${node.id}/`, {
+      const res = await fetch(`${API_BASE_URL}/api/pessoas/${node.id}/`, {
         headers: getHeaders(),
         credentials: 'include'
       });
@@ -183,7 +191,7 @@ function Arvore() {
     if (!novoComentario.trim()) return;
 
     try {
-      const res = await fetch(`http://localhost:8000/api/comentarios/${detalhes.uuid}/`, {
+      const res = await fetch(`${API_BASE_URL}/api/comentarios/${detalhes.uuid}/`, {
         method: 'POST',
         headers: getHeaders(),
         credentials: 'include',
@@ -199,6 +207,48 @@ function Arvore() {
       console.error("Erro ao enviar comentário:", err);
     }
   };
+
+  if (!user) {
+    return (
+      <div className="arvore-page" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', textAlign: 'center', padding: '40px 20px' }}>
+        <h2 style={{ color: '#333', marginBottom: '15px' }}>🔒 Acesso Restrito</h2>
+        <p style={{ color: '#666', fontSize: '1.1rem', marginBottom: '25px', maxWidth: '500px' }}>
+          É necessário estar logado para poder acessar essa área
+        </p>
+        <button 
+          onClick={() => navigate('/login')}
+          style={{
+            padding: '12px 28px', backgroundColor: '#1877f2', color: '#fff',
+            border: 'none', borderRadius: '6px', fontSize: '1rem', fontWeight: 'bold',
+            cursor: 'pointer', boxShadow: '0 2px 6px rgba(24, 119, 242, 0.3)'
+          }}
+        >
+          Fazer Login
+        </button>
+      </div>
+    );
+  }
+
+  if (!temFamilia) {
+    return (
+      <div className="arvore-page" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', textAlign: 'center', padding: '40px 20px' }}>
+        <h2 style={{ color: '#333', marginBottom: '15px' }}>🌐 Nenhuma Família Ativa</h2>
+        <p style={{ color: '#666', fontSize: '1.05rem', marginBottom: '20px' }}>
+          Selecione ou entre em uma família para visualizar a sua árvore genealógica.
+        </p>
+        <button 
+          onClick={() => navigate('/login')}
+          style={{
+            padding: '10px 22px', backgroundColor: '#1877f2', color: '#fff',
+            border: 'none', borderRadius: '6px', fontSize: '0.95rem', fontWeight: 'bold',
+            cursor: 'pointer'
+          }}
+        >
+          Escolher Família
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="arvore-page">

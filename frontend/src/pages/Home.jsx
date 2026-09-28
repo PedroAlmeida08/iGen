@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { API_BASE_URL } from '../config';
 import './Home.css';
 
 function Home() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState({ pessoas: 0, eventos: 0 });
   const [ultimosEventos, setUltimosEventos] = useState([]);
   const [isLoggedIn, setIsLoggedIn] = useState(false); 
@@ -18,7 +20,7 @@ function Home() {
   });
 
   useEffect(() => {
-    fetch('http://127.0.0.1:8000/api/auth/check/', { credentials: 'include' })
+    fetch(`${API_BASE_URL}/api/auth/check/`, { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         if (data.is_logged_in) {
@@ -29,14 +31,14 @@ function Home() {
 
     // SÓ ACESSA O BANCO SE HOUVER UMA FAMÍLIA VÁLIDA
     if (temFamilia) {
-      fetch('http://localhost:8000/api/pessoas/', { headers: getHeaders(), credentials: 'include' })
+      fetch(`${API_BASE_URL}/api/pessoas/`, { headers: getHeaders(), credentials: 'include' })
         .then(res => res.ok ? res.json() : [])
         .then(data => {
             if (Array.isArray(data)) setStats(prev => ({ ...prev, pessoas: data.length }));
         })
         .catch(err => console.error("Erro ao carregar pessoas:", err));
         
-      fetch('http://localhost:8000/api/eventos/', { headers: getHeaders(), credentials: 'include' })
+      fetch(`${API_BASE_URL}/api/eventos/`, { headers: getHeaders(), credentials: 'include' })
         .then(res => res.ok ? res.json() : [])
         .then(data => {
             if (Array.isArray(data)) {

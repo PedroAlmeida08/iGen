@@ -1,7 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { API_BASE_URL } from '../config';
 import './Timeline.css';
 
-function Timeline() {
+function Timeline({ user }) {
+  const navigate = useNavigate();
   const [eventos, setEventos] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -23,7 +26,7 @@ function Timeline() {
   const [fimAno, setFimAno] = useState('');
 
   const familiaAtiva = localStorage.getItem('familiaAtiva');
-  const temFamilia = familiaAtiva && familiaAtiva !== 'undefined' && familiaAtiva !== 'null';
+  const temFamilia = Boolean(familiaAtiva && familiaAtiva !== 'undefined' && familiaAtiva !== 'null' && familiaAtiva !== '');
 
   const getHeaders = () => ({
     'Content-Type': 'application/json',
@@ -39,15 +42,15 @@ function Timeline() {
   };
 
   useEffect(() => {
-    // PREVINE O ERRO 400 BLOQUEANDO O FETCH CASO NÃO EXISTA FAMÍLIA
-    if (!temFamilia) {
+    // PREVINE O ERRO 400 BLOQUEANDO O FETCH CASO NÃO EXISTA FAMÍLIA OU NÃO ESTEJA LOGADO
+    if (!user || !temFamilia) {
       setLoading(false);
       return;
     }
 
     Promise.all([
-      fetch('http://localhost:8000/api/pessoas/', { headers: getHeaders(), credentials: 'include' }).then(res => res.ok ? res.json() : []),
-      fetch('http://localhost:8000/api/eventos/', { headers: getHeaders(), credentials: 'include' }).then(res => res.ok ? res.json() : [])
+      fetch(`${API_BASE_URL}/api/pessoas/`, { headers: getHeaders(), credentials: 'include' }).then(res => res.ok ? res.json() : []),
+      fetch(`${API_BASE_URL}/api/eventos/`, { headers: getHeaders(), credentials: 'include' }).then(res => res.ok ? res.json() : [])
     ])
     .then(([pessoasData, eventosData]) => {
       if (Array.isArray(pessoasData)) setPessoas(pessoasData);
@@ -58,7 +61,7 @@ function Timeline() {
       console.error("Erro ao buscar timeline:", err);
       setLoading(false);
     });
-  }, [familiaAtiva]);
+  }, [familiaAtiva, user, temFamilia]);
 
   const eventosFiltrados = useMemo(() => {
     let resultado = [...eventos];
@@ -133,7 +136,7 @@ function Timeline() {
   const limparSelecao = () => setPessoasSelecionadas([]);
 
   const handleEventClick = (uuid) => {
-    fetch(`http://localhost:8000/api/eventos/${uuid}/`, { headers: getHeaders(), credentials: 'include' })
+    fetch(`${API_BASE_URL}/api/eventos/${uuid}/`, { headers: getHeaders(), credentials: 'include' })
       .then(res => res.json())
       .then(data => setSelectedEvent(data))
       .catch(err => console.error("Erro ao buscar detalhes:", err));
@@ -146,6 +149,48 @@ function Timeline() {
     setInicioDia(''); setInicioMes(''); setInicioAno('');
     setFimDia(''); setFimMes(''); setFimAno('');
   };
+
+  if (!user) {
+    return (
+      <div className="timeline-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', textAlign: 'center', padding: '40px 20px' }}>
+        <h2 style={{ color: '#333', marginBottom: '15px' }}>🔒 Acesso Restrito</h2>
+        <p style={{ color: '#666', fontSize: '1.1rem', marginBottom: '25px', maxWidth: '500px' }}>
+          É necessário estar logado para poder acessar essa área
+        </p>
+        <button 
+          onClick={() => navigate('/login')}
+          style={{
+            padding: '12px 28px', backgroundColor: '#1877f2', color: '#fff',
+            border: 'none', borderRadius: '6px', fontSize: '1rem', fontWeight: 'bold',
+            cursor: 'pointer', boxShadow: '0 2px 6px rgba(24, 119, 242, 0.3)'
+          }}
+        >
+          Fazer Login
+        </button>
+      </div>
+    );
+  }
+
+  if (!temFamilia) {
+    return (
+      <div className="timeline-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', textAlign: 'center', padding: '40px 20px' }}>
+        <h2 style={{ color: '#333', marginBottom: '15px' }}>🌐 Nenhuma Família Ativa</h2>
+        <p style={{ color: '#666', fontSize: '1.05rem', marginBottom: '20px' }}>
+          Selecione ou entre em uma família para visualizar os eventos históricos.
+        </p>
+        <button 
+          onClick={() => navigate('/login')}
+          style={{
+            padding: '10px 22px', backgroundColor: '#1877f2', color: '#fff',
+            border: 'none', borderRadius: '6px', fontSize: '0.95rem', fontWeight: 'bold',
+            cursor: 'pointer'
+          }}
+        >
+          Escolher Família
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="timeline-container">
