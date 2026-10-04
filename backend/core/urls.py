@@ -15,13 +15,19 @@ urlpatterns = [
     path('api/pessoas/', views.api_listar_pessoas, name='api_listar_pessoas'),
     path('api/pessoas/<str:uuid>/', views.api_detalhe_pessoa,
          name='api_detalhe_pessoa'),
-    path('api/pessoas/<str:uuid>/comentar/',
-         views.api_comentarios, name='api_comentarios'),
+    path('api/pessoas/<str:uuid_alvo>/comentar/',
+         views.api_comentarios, name='api_comentarios_pessoa'),
 
-    # --- 4. EVENTOS ---
+    # --- 4. EVENTOS (CRUD + Comentários) ---
     path('api/eventos/', views.api_listar_eventos, name='api_listar_eventos'),
     path('api/eventos/<str:uuid>/', views.api_detalhe_evento,
          name='api_detalhe_evento'),
+    path('api/eventos/<str:uuid_alvo>/comentar/',
+         views.api_comentarios, name='api_comentarios_evento'),
+
+    # --- 4.1 COMENTÁRIOS (Alvo: Pessoa ou Evento) ---
+    path('api/comentarios/<str:uuid_alvo>/',
+         views.api_comentarios, name='api_comentarios'),
 
     # --- 5. RELACIONAMENTOS ---
     path('api/relacionar/', views.api_criar_relacionamento,

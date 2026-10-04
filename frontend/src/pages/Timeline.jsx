@@ -8,6 +8,7 @@ function Timeline({ user }) {
   const [eventos, setEventos] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [novoComentarioEvento, setNovoComentarioEvento] = useState('');
 
   const [ordemAsc, setOrdemAsc] = useState(true);
 
@@ -140,6 +141,27 @@ function Timeline({ user }) {
       .then(res => res.json())
       .then(data => setSelectedEvent(data))
       .catch(err => console.error("Erro ao buscar detalhes:", err));
+  };
+
+  const handleEnviarComentarioEvento = async (e) => {
+    e.preventDefault();
+    if (!novoComentarioEvento.trim() || !selectedEvent) return;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/comentarios/${selectedEvent.uuid}/`, {
+        method: 'POST',
+        headers: getHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({ texto: novoComentarioEvento })
+      });
+
+      if (res.ok) {
+        setNovoComentarioEvento('');
+        handleEventClick(selectedEvent.uuid);
+      }
+    } catch (err) {
+      console.error("Erro ao enviar comentário no evento:", err);
+    }
   };
 
   const limparFiltros = () => {
@@ -402,6 +424,56 @@ function Timeline({ user }) {
               <li style={{color:'#999'}}>Ninguém vinculado ainda.</li>
             )}
           </ul>
+
+          <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '20px 0 15px 0' }} />
+
+          {/* --- SEÇÃO DE COMENTÁRIOS DO EVENTO --- */}
+          <h4 style={{ marginBottom: '10px', color: '#333' }}>
+            Comentários ({selectedEvent.comentarios?.length || 0}):
+          </h4>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '15px' }}>
+            {selectedEvent.comentarios && selectedEvent.comentarios.length > 0 ? (
+              selectedEvent.comentarios.map(c => (
+                <div key={c.uuid} style={{ background: '#f8f9fa', padding: '10px', borderRadius: '8px', border: '1px solid #e9ecef' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', alignItems: 'baseline' }}>
+                    <strong style={{ color: '#1877f2', fontSize: '0.9rem' }}>{c.autor}</strong>
+                    <span style={{ color: '#888', fontSize: '0.75rem' }}>
+                      {c.data_hora ? new Date(c.data_hora).toLocaleString('pt-BR') : ''}
+                    </span>
+                  </div>
+                  <p style={{ margin: 0, color: '#444', fontSize: '0.9rem', lineHeight: '1.4' }}>{c.texto}</p>
+                </div>
+              ))
+            ) : (
+              <p style={{ color: '#888', fontSize: '0.85rem', fontStyle: 'italic', margin: 0 }}>
+                Seja o primeiro a comentar neste evento.
+              </p>
+            )}
+          </div>
+
+          <form onSubmit={handleEnviarComentarioEvento} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <textarea
+              value={novoComentarioEvento}
+              onChange={e => setNovoComentarioEvento(e.target.value)}
+              placeholder="Adicione um detalhe ou memória sobre este evento..."
+              style={{
+                width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc',
+                backgroundColor: '#ffffff', color: '#333333', fontSize: '0.9rem', resize: 'vertical'
+              }}
+              rows="2"
+              required
+            />
+            <button
+              type="submit"
+              style={{
+                background: '#1877f2', color: '#fff', border: 'none', borderRadius: '6px',
+                padding: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 'bold'
+              }}
+            >
+              Enviar Comentário
+            </button>
+          </form>
         </div>
       )}
     </div>

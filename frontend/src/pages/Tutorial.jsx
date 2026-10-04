@@ -331,8 +331,8 @@ function Tutorial() {
               <span className="substep-icon">💬</span>
               <h3>4.3. Detalhes e Comentários</h3>
               <p>
-                Ao clicar sobre qualquer pessoa na <strong>Árvore</strong>, abre-se um painel lateral mostrando suas datas vitais, 
-                os eventos de que participou e a seção de <strong>Comentários</strong>, onde qualquer membro pode escrever histórias e memórias.
+                Ao clicar sobre qualquer pessoa na <strong>Árvore</strong> ou qualquer evento na <strong>Linha do Tempo</strong>, 
+                abre-se um painel lateral com seus detalhes e a seção de <strong>Comentários</strong>, onde qualquer membro pode registrar histórias e memórias.
               </p>
             </div>
 
@@ -351,7 +351,7 @@ function Tutorial() {
             <h4>🎯 Dica de Exploração</h4>
             <p>
               Clique sobre qualquer cartão de evento na <strong>Linha do Tempo</strong> para abrir os detalhes completos do acontecimento, 
-              incluindo a descrição histórica, o local e a lista completa de todos os familiares que estiveram presentes!
+              visualizar a descrição histórica, o local, a lista de participantes e adicionar <strong>comentários sobre o evento</strong>!
             </p>
           </div>
 

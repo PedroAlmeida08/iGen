@@ -581,7 +581,7 @@ def api_comentarios(request, uuid_alvo):
             })
             CREATE (c)-[:SOBRE]->(alvo)
             CREATE (c)-[:PERTENCE_A]->(f)
-            RETURN c.uuid
+            RETURN c.uuid, labels(alvo) as tipo_alvo, coalesce(alvo.nomeCompleto, alvo.tipo, 'Registro') as nome_alvo
             """
             parametros = {
                 'uuid_alvo': uuid_alvo,
@@ -596,6 +596,12 @@ def api_comentarios(request, uuid_alvo):
 
             if not resultados:
                 return HttpResponseBadRequest("Alvo não encontrado ou não pertence a esta família.")
+
+            labels_alvo = resultados[0][1] if len(resultados[0]) > 1 else []
+            nome_alvo = resultados[0][2] if len(resultados[0]) > 2 else 'Registro'
+            entidade_log = 'Evento' if 'Evento' in labels_alvo else 'Pessoa'
+            registrar_log(request.user, familia_ws, "Comentou", entidade_log,
+                          f"Comentou em {nome_alvo}: \"{texto[:60]}\"")
 
             return JsonResponse({'message': 'Comentário adicionado com sucesso!'}, status=201)
 
@@ -697,7 +703,7 @@ def api_detalhe_evento(request, uuid):
         query = "MATCH (p:Pessoa)-[]->(e:Evento {uuid: $uuid}) RETURN p"
         results, _ = db.cypher_query(query, {'uuid': uuid})
         participantes = [{'uuid': row[0].get('uuid'), 'nome': row[0].get(
-            'nomeCompleto')} for row in results]
+            'nomeCompleto'), 'apelido': row[0].get('apelido', '')} for row in results]
 
         query_comentarios = "MATCH (c:Comentario)-[:SOBRE]->(e:Evento {uuid: $uuid}) RETURN c ORDER BY c.data_hora DESC"
         res_com, _ = db.cypher_query(query_comentarios, {'uuid': uuid})
