@@ -60,6 +60,7 @@ function Home() {
           <div className="hero-actions">
             <Link to="/arvore" className="btn-action">Árvore Genealógica</Link>
             <Link to="/timeline" className="btn-action">Timeline</Link>
+            <Link to="/tutorial" className="btn-action">Tutorial</Link>
             <Link to={isLoggedIn ? "/admin" : "/login"} className="btn-action">
               Acessar Painel Administrativo
             </Link>

@@ -8,6 +8,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Admin from './pages/Admin';
 import Sobre from './pages/Sobre';
+import Tutorial from './pages/Tutorial';
 import { API_BASE_URL } from './config';
 import './App.css';
 
@@ -92,6 +93,7 @@ function App() {
         <div className="content-wrap">
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/tutorial" element={<Tutorial />} />
             <Route path="/sobre" element={<Sobre />} />
             
             <Route path="/login" element={<Login setUser={setUser} />} />

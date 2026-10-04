@@ -1,0 +1,386 @@
+/* frontend/src/pages/Tutorial.css */
+
+.tutorial-container {
+  max-width: 960px;
+  margin: 40px auto;
+  padding: 0 20px 60px 20px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: #333;
+  animation: tutorialFadeIn 0.4s ease-in;
+}
+
+.tutorial-header {
+  text-align: center;
+  padding: 45px 25px;
+  background: linear-gradient(135deg, #eef4ff 0%, #ffffff 100%);
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(24, 119, 242, 0.06);
+  margin-bottom: 35px;
+  border: 1px solid #dbeafe;
+}
+
+.tutorial-header h1 {
+  font-size: 2.6rem;
+  color: #1877f2;
+  margin: 0 0 12px 0;
+  font-weight: 800;
+}
+
+.tutorial-header p {
+  font-size: 1.15rem;
+  color: #555;
+  max-width: 680px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* --- NAVEGAÇÃO DE ETAPAS (STEPPER) --- */
+.tutorial-stepper {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 30px;
+}
+
+.step-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #ffffff;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.step-tab-btn:hover {
+  border-color: #93c5fd;
+  background: #f8fafc;
+  transform: translateY(-2px);
+}
+
+.step-tab-btn.active {
+  border-color: #1877f2;
+  background: #eef4ff;
+  box-shadow: 0 4px 12px rgba(24, 119, 242, 0.12);
+}
+
+.step-number {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  color: #4b5563;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  flex-shrink: 0;
+}
+
+.step-tab-btn.active .step-number {
+  background: #1877f2;
+  color: #ffffff;
+}
+
+.step-tab-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.step-tab-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.step-tab-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.step-tab-btn.active .step-tab-title {
+  color: #1877f2;
+}
+
+/* --- CONTEÚDO DOS PASSOS --- */
+.tutorial-section-card {
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);
+  padding: 35px;
+  margin-bottom: 30px;
+  border-top: 4px solid #1877f2;
+  animation: tutorialFadeIn 0.3s ease-out;
+}
+
+.tutorial-section-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.tutorial-section-badge {
+  background: #1877f2;
+  color: #ffffff;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.tutorial-section-header h2 {
+  margin: 0;
+  font-size: 1.6rem;
+  color: #1f2937;
+}
+
+.tutorial-intro-text {
+  font-size: 1.05rem;
+  color: #4b5563;
+  line-height: 1.7;
+  margin-bottom: 25px;
+}
+
+/* --- SUB-STEPS GRID --- */
+.tutorial-substeps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
+  margin-bottom: 25px;
+}
+
+.substep-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 20px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.substep-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.05);
+}
+
+.substep-icon {
+  font-size: 1.8rem;
+  margin-bottom: 10px;
+  display: inline-block;
+}
+
+.substep-card h3 {
+  margin: 0 0 8px 0;
+  font-size: 1.1rem;
+  color: #1877f2;
+}
+
+.substep-card p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #4b5563;
+  line-height: 1.6;
+}
+
+/* --- TABELA / CARDS DE PAPÉIS --- */
+.roles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.role-box {
+  padding: 18px;
+  border-radius: 10px;
+  border-left: 5px solid #ccc;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.role-box.leitor {
+  border-left-color: #64748b;
+  background: #f8fafc;
+}
+
+.role-box.editor {
+  border-left-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.role-box.admin {
+  border-left-color: #1877f2;
+  background: #eff6ff;
+}
+
+.role-box h4 {
+  margin: 0 0 8px 0;
+  font-size: 1.05rem;
+  color: #1e293b;
+}
+
+.role-box p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #475569;
+  line-height: 1.5;
+}
+
+/* --- CAIXA DE DESTAQUE / DICA --- */
+.tutorial-callout {
+  background: #eef4ff;
+  border-left: 5px solid #1877f2;
+  padding: 18px 22px;
+  border-radius: 8px;
+  margin-top: 20px;
+}
+
+.tutorial-callout h4 {
+  margin: 0 0 6px 0;
+  color: #1877f2;
+  font-size: 1rem;
+}
+
+.tutorial-callout p {
+  margin: 0;
+  color: #374151;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+/* --- FLUXO VISUAL (WORKFLOW) --- */
+.workflow-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 20px;
+  margin: 25px 0;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.workflow-node {
+  flex: 1;
+  min-width: 150px;
+  text-align: center;
+  padding: 12px;
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.workflow-arrow {
+  font-size: 1.4rem;
+  color: #1877f2;
+  font-weight: bold;
+}
+
+/* --- BOTÕES DE NAVEGAÇÃO ENTRE PASSOS E ATALHOS --- */
+.tutorial-footer-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid #e5e7eb;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.btn-tutorial-nav {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #374151;
+  transition: all 0.2s ease;
+}
+
+.btn-tutorial-nav:hover:not(:disabled) {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.btn-tutorial-nav:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-tutorial-primary {
+  padding: 10px 22px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  border: none;
+  background: #1877f2;
+  color: #ffffff;
+  text-decoration: none;
+  display: inline-block;
+  transition: all 0.2s ease;
+}
+
+.btn-tutorial-primary:hover {
+  background: #145dbf;
+  color: #ffffff;
+}
+
+.view-mode-toggle {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 15px;
+}
+
+.btn-toggle-mode {
+  background: none;
+  border: 1px solid #cbd5e1;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #475569;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn-toggle-mode:hover {
+  background: #f1f5f9;
+  color: #1877f2;
+  border-color: #93c5fd;
+}
+
+@keyframes tutorialFadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 768px) {
+  .tutorial-header h1 {
+    font-size: 2rem;
+  }
+  .tutorial-section-card {
+    padding: 22px;
+  }
+  .workflow-arrow {
+    display: none;
+  }
+}

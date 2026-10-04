@@ -91,6 +91,7 @@ function Navbar({ user, setUser, familias }) { // NOVO: Recebe 'familias' do App
           <li><NavLink to="/login">Entrar</NavLink></li>
         )}
 
+        <li><NavLink to="/tutorial">Tutorial</NavLink></li>
         <li><NavLink to="/sobre">Sobre</NavLink></li>
       </ul>
     </nav>
