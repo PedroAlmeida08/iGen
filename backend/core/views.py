@@ -950,9 +950,9 @@ def obter_dados_atuais(solicitacao):
 
             q = """
             MATCH (p:Pessoa {uuid: $uuid})
-            OPTIONAL MATCH (pai:Pessoa)-[:PAI_DE]->(p)
-            OPTIONAL MATCH (mae:Pessoa)-[:MAE_DE]->(p)
-            OPTIONAL MATCH (p)-[:CASADO_COM]-(c:Pessoa)
+            OPTIONAL MATCH (pai:Pessoa)-[:PAI|PAI_DE]->(p)
+            OPTIONAL MATCH (mae:Pessoa)-[:MAE|MAE_DE]->(p)
+            OPTIONAL MATCH (p)-[:CASADO|CASADO_COM]-(c:Pessoa)
             RETURN pai.uuid as pai_uuid, pai.nomeCompleto as pai_nome,
                    mae.uuid as mae_uuid, mae.nomeCompleto as mae_nome,
                    c.uuid as conjuge_uuid, c.nomeCompleto as conjuge_nome

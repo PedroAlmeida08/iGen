@@ -32,3 +32,6 @@ Thumbs.db
 
 # Script para popular banco de dados
 backend/populate.py
+
+# Monografia
+*.pdf
